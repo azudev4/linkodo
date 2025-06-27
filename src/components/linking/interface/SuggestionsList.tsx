@@ -9,19 +9,24 @@ import { SuggestionCard } from './SuggestionsCard';
 import { AiSelectionModal } from './AiSelectionModal';
 import { Link, Sparkles, AlertCircle } from 'lucide-react';
 
+interface SuggestionOption {
+  id: string;
+  title: string;
+  url: string;
+  description: string;
+  matchedSection: string;
+  relevanceScore: number;
+}
+
 interface Suggestion {
   id: string;
   anchorText: string;
-  targetPage: {
-    title: string;
-    url: string;
-    description: string;
-  };
   contextBefore: string;
   contextAfter: string;
-  relevanceScore: number;
+  options: SuggestionOption[];
   isAiSelected: boolean;
   isAccepted: boolean;
+  selectedOptionId?: string;
 }
 
 export function SuggestionsList() {
@@ -29,42 +34,94 @@ export function SuggestionsList() {
     {
       id: '1',
       anchorText: 'soil preparation',
-      targetPage: {
-        title: 'Complete Guide to Soil Preparation',
-        url: '/guides/soil-preparation',
-        description: 'Learn the essential steps for preparing your garden soil for optimal plant growth.'
-      },
       contextBefore: 'important to consider',
       contextAfter: 'and companion planting',
-      relevanceScore: 0.92,
+      options: [
+        {
+          id: 'opt-1-1',
+          title: 'Guide complet de préparation du sol',
+          url: '/guides/preparation-sol-potager',
+          description: 'Découvrez toutes les étapes pour préparer un sol fertile pour vos légumes.',
+          matchedSection: 'H1',
+          relevanceScore: 0.94
+        },
+        {
+          id: 'opt-1-2',
+          title: 'Améliorer la terre du jardin',
+          url: '/techniques/ameliorer-terre-jardin',
+          description: 'Techniques pour enrichir et structurer votre sol de jardin.',
+          matchedSection: 'H2',
+          relevanceScore: 0.87
+        },
+        {
+          id: 'opt-1-3',
+          title: 'Sol et compost au potager',
+          url: '/guides/compost-sol-potager',
+          description: 'Comment utiliser le compost pour améliorer la qualité de votre sol.',
+          matchedSection: 'H3',
+          relevanceScore: 0.82
+        }
+      ],
       isAiSelected: false,
       isAccepted: false
     },
     {
       id: '2',
       anchorText: 'companion planting',
-      targetPage: {
-        title: 'Companion Planting for Vegetables',
-        url: '/techniques/companion-planting',
-        description: 'Discover which plants grow well together and boost your garden\'s productivity.'
-      },
       contextBefore: 'soil preparation and',
       contextAfter: 'techniques. Proper spacing',
-      relevanceScore: 0.89,
+      options: [
+        {
+          id: 'opt-2-1',
+          title: 'Associations de légumes au potager',
+          url: '/techniques/associations-legumes',
+          description: 'Découvrez quels légumes planter ensemble pour optimiser votre récolte.',
+          matchedSection: 'H1',
+          relevanceScore: 0.91
+        },
+        {
+          id: 'opt-2-2',
+          title: 'Plantes compagnes pour tomates',
+          url: '/guides/compagnons-tomates',
+          description: 'Les meilleures plantes à associer avec vos tomates.',
+          matchedSection: 'H2',
+          relevanceScore: 0.85
+        }
+      ],
       isAiSelected: false,
       isAccepted: false
     },
     {
       id: '3',
       anchorText: 'seasonal timing',
-      targetPage: {
-        title: 'Garden Planting Calendar',
-        url: '/guides/planting-calendar',
-        description: 'Know exactly when to plant your vegetables for the best harvest results.'
-      },
       contextBefore: 'spacing and understanding',
       contextAfter: 'will help ensure',
-      relevanceScore: 0.84,
+      options: [
+        {
+          id: 'opt-3-1',
+          title: 'Calendrier des semis au potager',
+          url: '/guides/calendrier-semis',
+          description: 'Sachez exactement quand semer vos légumes selon les saisons.',
+          matchedSection: 'H1',
+          relevanceScore: 0.89
+        },
+        {
+          id: 'opt-3-2',
+          title: 'Semis de printemps : timing parfait',
+          url: '/guides/semis-printemps',
+          description: 'Optimisez vos semis de printemps avec le bon timing.',
+          matchedSection: 'H2',
+          relevanceScore: 0.83
+        },
+        {
+          id: 'opt-3-3',
+          title: 'Quand planter les légumes d\'été',
+          url: '/guides/plantation-ete',
+          description: 'Guide des dates de plantation pour les légumes d\'été.',
+          matchedSection: 'H3',
+          relevanceScore: 0.78
+        }
+      ],
       isAiSelected: false,
       isAccepted: false
     }
@@ -73,9 +130,9 @@ export function SuggestionsList() {
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
   const [isAnalyzed, setIsAnalyzed] = useState(true); // Mock state - would come from parent
 
-  const handleAcceptSuggestion = (id: string) => {
+  const handleAcceptSuggestion = (id: string, optionId: string) => {
     setSuggestions(prev => 
-      prev.map(s => s.id === id ? { ...s, isAccepted: true } : s)
+      prev.map(s => s.id === id ? { ...s, isAccepted: true, selectedOptionId: optionId } : s)
     );
   };
 
@@ -87,15 +144,16 @@ export function SuggestionsList() {
 
   const handleAiSelection = (linkCount: number) => {
     // Mock AI selection - would call actual AI endpoint
-    const topSuggestions = [...suggestions]
-      .sort((a, b) => b.relevanceScore - a.relevanceScore)
-      .slice(0, linkCount);
-    
+    // For now, just mark the top suggestions as AI selected
+    let selectedCount = 0;
     setSuggestions(prev => 
-      prev.map(s => ({
-        ...s,
-        isAiSelected: topSuggestions.some(selected => selected.id === s.id)
-      }))
+      prev.map(s => {
+        if (selectedCount < linkCount) {
+          selectedCount++;
+          return { ...s, isAiSelected: true };
+        }
+        return { ...s, isAiSelected: false };
+      })
     );
     
     setIsAiModalOpen(false);
@@ -169,7 +227,7 @@ export function SuggestionsList() {
               >
                 <SuggestionCard
                   suggestion={suggestion}
-                  onAccept={() => handleAcceptSuggestion(suggestion.id)}
+                  onAccept={(optionId) => handleAcceptSuggestion(suggestion.id, optionId)}
                   onReject={() => handleRejectSuggestion(suggestion.id)}
                 />
               </motion.div>

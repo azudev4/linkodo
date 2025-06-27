@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Progress } from '@/components/ui/progress';
 import { Slider } from '@/components/ui/slider';
@@ -16,30 +17,126 @@ export function CrawlManager() {
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isCrawling, setIsCrawling] = useState(false);
   const [crawlProgress, setCrawlProgress] = useState(0);
-  const [maxPages, setMaxPages] = useState([1000]);
+  const [maxPages, setMaxPages] = useState([10]); // Default to 10 for testing
   const [excludePatterns, setExcludePatterns] = useState('');
+  const [forceRecrawl, setForceRecrawl] = useState(false);
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
 
-  // Mock data - would come from database
-  const indexedPages = 1247;
-  const lastCrawl = 'June 25, 2025';
+  // Real data - would be fetched from API
+  const [indexedPages, setIndexedPages] = useState(1247);
+  const [lastCrawl, setLastCrawl] = useState('June 25, 2025');
+
+  // Fetch current stats on component mount
+  useEffect(() => {
+    fetchCrawlStats();
+  }, []);
+
+  const fetchCrawlStats = async () => {
+    try {
+      const response = await fetch('/api/crawl');
+      const data = await response.json();
+      
+      if (data.success) {
+        setIndexedPages(data.stats.totalPages);
+        
+        // Get last crawl date from recent jobs
+        if (data.stats.recentJobs.length > 0) {
+          const lastJob = data.stats.recentJobs[0];
+          const lastDate = new Date(lastJob.completed_at || lastJob.created_at);
+          setLastCrawl(lastDate.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch crawl stats:', error);
+    }
+  };
 
   const handleStartCrawl = async () => {
     if (!url.trim()) return;
     
     setIsCrawling(true);
     setCrawlProgress(0);
-    
-    // Mock progress simulation
-    const interval = setInterval(() => {
-      setCrawlProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsCrawling(false);
-          return 100;
-        }
-        return prev + Math.random() * 10;
+    setCurrentJobId(null);
+
+    try {
+      const response = await fetch('/api/crawl', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          baseUrl: url,
+          maxPages: maxPages[0],
+          excludePatterns: excludePatterns,
+          forceRecrawl: forceRecrawl
+        }),
       });
-    }, 500);
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to start crawl');
+      }
+
+      if (data.success) {
+        setCurrentJobId(data.jobId);
+        // Start polling for progress
+        pollCrawlProgress(data.jobId);
+      } else {
+        throw new Error(data.error || 'Crawl failed to start');
+      }
+
+    } catch (error) {
+      console.error('Crawl error:', error);
+      setIsCrawling(false);
+      // You might want to show an error message to the user here
+      alert(error instanceof Error ? error.message : 'Failed to start crawl');
+    }
+  };
+
+  const pollCrawlProgress = async (jobId: string) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/crawl?jobId=${jobId}`);
+        const data = await response.json();
+
+        if (data.success && data.job) {
+          const job = data.job;
+          
+          // Calculate progress
+          if (job.pages_total && job.pages_total > 0) {
+            const progress = (job.pages_crawled / Math.min(job.pages_total, maxPages[0])) * 100;
+            setCrawlProgress(Math.min(progress, 100));
+          }
+
+          // Check if completed
+          if (job.status === 'completed' || job.status === 'failed') {
+            clearInterval(pollInterval);
+            setIsCrawling(false);
+            
+            if (job.status === 'completed') {
+              setCrawlProgress(100);
+              // Refresh stats
+              await fetchCrawlStats();
+              // Clear form
+              setUrl('');
+              setCurrentJobId(null);
+            } else {
+              alert(`Crawl failed: ${job.error_message || 'Unknown error'}`);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error polling crawl progress:', error);
+      }
+    }, 3000); // Poll every 3 seconds
+
+    // Clear interval after 10 minutes max
+    setTimeout(() => clearInterval(pollInterval), 600000);
   };
 
   return (
@@ -125,11 +222,14 @@ export function CrawlManager() {
                   <Slider
                     value={maxPages}
                     onValueChange={setMaxPages}
-                    max={5000}
-                    min={100}
-                    step={100}
+                    max={100}
+                    min={5}
+                    step={5}
                     className="w-full"
                   />
+                  <p className="text-xs text-gray-500">
+                    Recommended: 5-20 pages for testing, 50-100 for production
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="exclude">Exclude Patterns (optional)</Label>
@@ -143,6 +243,19 @@ export function CrawlManager() {
                     Comma-separated patterns to exclude from crawling
                   </p>
                 </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="force-recrawl"
+                    checked={forceRecrawl}
+                    onCheckedChange={(checked) => setForceRecrawl(checked as boolean)}
+                  />
+                  <Label htmlFor="force-recrawl" className="text-sm font-normal">
+                    Force recrawl existing pages
+                  </Label>
+                </div>
+                <p className="text-xs text-gray-500">
+                  By default, pages already in database are skipped. Enable this to re-index everything.
+                </p>
               </motion.div>
             </CollapsibleContent>
           </Collapsible>
@@ -155,10 +268,18 @@ export function CrawlManager() {
               className="space-y-2"
             >
               <div className="flex justify-between text-sm">
-                <span>Crawling in progress...</span>
+                <span>
+                  {currentJobId ? 
+                    `Crawling website... (Job: ${currentJobId.slice(0, 8)})` : 
+                    'Starting crawl...'
+                  }
+                </span>
                 <span>{Math.round(crawlProgress)}%</span>
               </div>
               <Progress value={crawlProgress} className="w-full" />
+              <p className="text-xs text-gray-500">
+                Processing up to {maxPages[0]} pages • This may take a few minutes
+              </p>
             </motion.div>
           )}
 

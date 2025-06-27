@@ -1,35 +1,67 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Check, X, ExternalLink, Sparkles, Target } from 'lucide-react';
+import { Check, X, ExternalLink, Sparkles, Target, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+interface SuggestionOption {
+  id: string;
+  title: string;
+  url: string;
+  description: string;
+  matchedSection: string; // "H1", "H2", "H3", "Keywords"
+  relevanceScore: number;
+}
 
 interface Suggestion {
   id: string;
   anchorText: string;
-  targetPage: {
-    title: string;
-    url: string;
-    description: string;
-  };
   contextBefore: string;
   contextAfter: string;
-  relevanceScore: number;
+  options: SuggestionOption[]; // Top 3 options
   isAiSelected: boolean;
   isAccepted: boolean;
+  selectedOptionId?: string;
 }
 
 interface SuggestionCardProps {
   suggestion: Suggestion;
-  onAccept: () => void;
+  onAccept: (optionId: string) => void;
   onReject: () => void;
 }
 
 export function SuggestionCard({ suggestion, onAccept, onReject }: SuggestionCardProps) {
-  const { anchorText, targetPage, contextBefore, contextAfter, relevanceScore, isAiSelected, isAccepted } = suggestion;
+  const { anchorText, contextBefore, contextAfter, options = [], isAiSelected, isAccepted, selectedOptionId } = suggestion;
+  const [showAllOptions, setShowAllOptions] = useState(false);
+  const [selectedOption, setSelectedOption] = useState<string>(() => {
+    if (selectedOptionId) return selectedOptionId;
+    if (options.length > 0 && options[0]?.id) return options[0].id;
+    return '';
+  });
+
+  const topOption = options.length > 0 ? options[0] : null;
+  const additionalOptions = options.slice(1);
+
+  console.log('Debug - options:', options);
+  console.log('Debug - additionalOptions:', additionalOptions);
+
+  const handleAccept = () => {
+    onAccept(selectedOption);
+  };
+
+  const getMatchedSectionColor = (section: string) => {
+    switch (section) {
+      case 'H1': return 'bg-blue-100 text-blue-700';
+      case 'H2': return 'bg-green-100 text-green-700';
+      case 'H3': return 'bg-purple-100 text-purple-700';
+      case 'H4': return 'bg-orange-100 text-orange-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
+  };
 
   return (
     <Card className={cn(
@@ -55,13 +87,6 @@ export function SuggestionCard({ suggestion, onAccept, onReject }: SuggestionCar
                 </Badge>
               )}
             </div>
-            
-            <div className="flex items-center space-x-2">
-              <Badge variant="outline" className="text-xs">
-                <Target className="w-3 h-3 mr-1" />
-                {Math.round(relevanceScore * 100)}% match
-              </Badge>
-            </div>
           </div>
 
           {/* Context and anchor text */}
@@ -75,50 +100,154 @@ export function SuggestionCard({ suggestion, onAccept, onReject }: SuggestionCar
             </div>
           </div>
 
-          {/* Target page preview */}
-          <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-            <div className="space-y-2">
-              <div className="flex items-start justify-between">
-                <h4 className="font-medium text-gray-900 text-sm leading-tight">
-                  {targetPage.title}
-                </h4>
-                <ExternalLink className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0 ml-2" />
-              </div>
-              
-              <p className="text-xs text-gray-600 leading-relaxed">
-                {targetPage.description}
-              </p>
-              
-              <div className="text-xs text-gray-500 font-mono">
-                {targetPage.url}
+          {/* Top Option (Always Visible) */}
+          {topOption && (
+            <div className={cn(
+              "border rounded-lg p-3 transition-all cursor-pointer",
+              selectedOption === topOption.id 
+                ? "border-blue-300 bg-blue-50" 
+                : "border-gray-200 bg-gray-50 hover:border-gray-300"
+            )}
+            onClick={() => setSelectedOption(topOption.id)}
+            >
+              <div className="space-y-2">
+                <div className="flex items-start justify-between">
+                  <h4 className="font-medium text-gray-900 text-sm leading-tight">
+                    {topOption.title}
+                  </h4>
+                  <div className="flex items-center space-x-2 flex-shrink-0 ml-2">
+                    <Badge variant="outline" className={cn("text-xs", getMatchedSectionColor(topOption.matchedSection))}>
+                      {topOption.matchedSection}
+                    </Badge>
+                    <Badge variant="outline" className="text-xs">
+                      <Target className="w-3 h-3 mr-1" />
+                      {Math.round(topOption.relevanceScore * 100)}%
+                    </Badge>
+                  </div>
+                </div>
+                
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  {topOption.description}
+                </p>
+                
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-gray-500 font-mono">
+                    {topOption.url}
+                  </div>
+                  <ExternalLink className="w-3 h-3 text-gray-400" />
+                </div>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* Show More Options Toggle */}
+          {additionalOptions.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowAllOptions(!showAllOptions)}
+              className="w-full text-xs text-gray-600 hover:text-gray-900"
+            >
+              {showAllOptions ? (
+                <>
+                  <ChevronUp className="w-4 h-4 mr-1" />
+                  Hide other options
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-4 h-4 mr-1" />
+                  See {additionalOptions.length} more option{additionalOptions.length > 1 ? 's' : ''}
+                </>
+              )}
+            </Button>
+          )}
+
+          {/* Additional Options (Expandable) */}
+          <AnimatePresence>
+            {showAllOptions && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-2"
+              >
+                {additionalOptions.map((option) => (
+                  <div
+                    key={option.id}
+                    className={cn(
+                      "border rounded-lg p-3 transition-all cursor-pointer",
+                      selectedOption === option.id 
+                        ? "border-blue-300 bg-blue-50" 
+                        : "border-gray-200 bg-gray-50 hover:border-gray-300"
+                    )}
+                    onClick={() => setSelectedOption(option.id)}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between">
+                        <h4 className="font-medium text-gray-900 text-sm leading-tight">
+                          {option.title}
+                        </h4>
+                        <div className="flex items-center space-x-2 flex-shrink-0 ml-2">
+                          <Badge variant="outline" className={cn("text-xs", getMatchedSectionColor(option.matchedSection))}>
+                            {option.matchedSection}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            <Target className="w-3 h-3 mr-1" />
+                            {Math.round(option.relevanceScore * 100)}%
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      <p className="text-xs text-gray-600 leading-relaxed">
+                        {option.description}
+                      </p>
+                      
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs text-gray-500 font-mono">
+                          {option.url}
+                        </div>
+                        <ExternalLink className="w-3 h-3 text-gray-400" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Action buttons */}
           {!isAccepted && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="flex items-center justify-end space-x-2 pt-2"
+              className="flex items-center justify-between pt-2"
             >
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onReject}
-                className="text-gray-600 hover:text-red-600 hover:border-red-200"
-              >
-                <X className="w-4 h-4 mr-1" />
-                Reject
-              </Button>
-              <Button
-                size="sm"
-                onClick={onAccept}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                <Check className="w-4 h-4 mr-1" />
-                Accept
-              </Button>
+              <div className="text-xs text-gray-500">
+                {selectedOption !== topOption?.id && (
+                  <span>Alternative option selected</span>
+                )}
+              </div>
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onReject}
+                  className="text-gray-600 hover:text-red-600 hover:border-red-200"
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Reject
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleAccept}
+                  className="bg-green-600 hover:bg-green-700"
+                  disabled={!selectedOption}
+                >
+                  <Check className="w-4 h-4 mr-1" />
+                  Accept
+                </Button>
+              </div>
             </motion.div>
           )}
 
@@ -129,7 +258,7 @@ export function SuggestionCard({ suggestion, onAccept, onReject }: SuggestionCar
               className="text-center py-2"
             >
               <span className="text-sm text-green-700 font-medium">
-                ✓ This link will be added to your content
+                ✓ Link accepted: {options.find(o => o.id === selectedOptionId)?.title}
               </span>
             </motion.div>
           )}
