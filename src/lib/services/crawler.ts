@@ -1,10 +1,10 @@
 import FirecrawlApp from '@mendable/firecrawl-js';
-import OpenAI from 'openai';
 import { supabase } from '@/lib/db/client';
 
 interface FirecrawlCrawlResponse {
-  jobId: string;
+  id: string;
   success: boolean;
+  url?: string;
 }
 
 interface FirecrawlStatusResponse {
@@ -21,12 +21,10 @@ interface FirecrawlErrorResponse {
   error: string;
 }
 
-type FirecrawlResponse = FirecrawlCrawlResponse | FirecrawlErrorResponse;
 type FirecrawlStatusResult = FirecrawlStatusResponse | FirecrawlErrorResponse;
 
 // Initialize services
 const firecrawl = new FirecrawlApp({ apiKey: process.env.FIRECRAWL_API_KEY! });
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 export interface CrawlConfig {
   baseUrl: string;
@@ -44,9 +42,8 @@ export interface ProcessedPage {
   h3Tags: string[];
   h4Tags: string[];
   primaryKeywords: string[];
-  semanticKeywords: string[];
   wordCount: number;
-  embedding: number[];
+  contentSnippet: string | null;
 }
 
 /**
@@ -118,77 +115,56 @@ function extractPrimaryKeywords(markdown: string): string[] {
 }
 
 /**
- * Generate semantic keywords using OpenAI
+ * Extract content snippet between H1 and first H2
  */
-async function generateSemanticKeywords(
-  primaryKeywords: string[],
-  title: string | null,
-  h1: string | null
-): Promise<string[]> {
-  try {
-    const prompt = `Given this French gardening content context, generate 10-12 semantic keywords (related terms, synonyms, variations):
-
-Title: ${title || 'N/A'}
-Main heading: ${h1 || 'N/A'}
-Primary keywords: ${primaryKeywords.join(', ')}
-
-Return only a JSON array of lowercase French keywords related to gardening/plants, no explanations:
-["keyword1", "keyword2", ...]`;
-
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-    });
-
-    const content = response.choices[0].message.content;
-    if (!content) return [];
-
-    const keywords = JSON.parse(content);
-    return Array.isArray(keywords) ? keywords : [];
-  } catch (error) {
-    console.error('Failed to generate semantic keywords:', error);
-    return [];
+function extractContentSnippet(markdown: string, h1: string | null): string | null {
+  // Strategy 1: Extract between H1 and first H2 (most common blog structure)
+  if (h1) {
+    const h1Pattern = new RegExp(`^# ${h1.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'm');
+    const h1Match = markdown.match(h1Pattern);
+    
+    if (h1Match) {
+      const afterH1 = markdown.substring(h1Match.index! + h1Match[0].length);
+      const h2Match = afterH1.match(/^## .+$/m);
+      
+      const contentSection = h2Match 
+        ? afterH1.substring(0, h2Match.index!) 
+        : afterH1.substring(0, 500); // Fallback limit
+      
+      return cleanAndTruncateContent(contentSection);
+    }
   }
+  
+  // Fallback: First substantial paragraph
+  const paragraphs = markdown.split('\n\n');
+  for (const paragraph of paragraphs) {
+    const cleaned = paragraph.replace(/^#+\s/, '').trim();
+    if (cleaned.length > 50 && !cleaned.startsWith('#')) {
+      return cleanAndTruncateContent(cleaned);
+    }
+  }
+  
+  return null;
+}
+
+function cleanAndTruncateContent(content: string): string {
+  const cleaned = content
+    .replace(/!\[.*?\]\(.*?\)/g, '') // Remove images
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1') // Convert links to text
+    .replace(/[*_`]/g, '') // Remove formatting
+    .replace(/\n+/g, ' ') // Replace newlines with spaces
+    .trim();
+  
+  // Truncate to ~200 chars at word boundary
+  if (cleaned.length <= 200) return cleaned;
+  
+  const truncated = cleaned.substring(0, 200);
+  const lastSpace = truncated.lastIndexOf(' ');
+  return (lastSpace > 150 ? truncated.substring(0, lastSpace) : truncated) + '...';
 }
 
 /**
- * Generate embedding for page content
- */
-async function generateEmbedding(
-  title: string | null,
-  h1: string | null,
-  h2Tags: string[],
-  h3Tags: string[],
-  h4Tags: string[],
-  primaryKeywords: string[]
-): Promise<number[]> {
-  const embeddingText = [
-    title,
-    h1,
-    ...h2Tags,
-    ...h3Tags,
-    ...h4Tags,
-    ...primaryKeywords
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-  try {
-    const response = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: embeddingText,
-    });
-
-    return response.data[0].embedding;
-  } catch (error) {
-    console.error('Failed to generate embedding:', error);
-    throw error;
-  }
-}
-
-/**
- * Process a single page from Firecrawl data
+ * Process a single page from Firecrawl data (no AI dependencies)
  */
 export async function processPage(firecrawlData: any): Promise<ProcessedPage> {
   const { markdown, metadata } = firecrawlData;
@@ -197,23 +173,9 @@ export async function processPage(firecrawlData: any): Promise<ProcessedPage> {
   const headings = extractHeadings(cleanedMarkdown);
   
   const primaryKeywords = extractPrimaryKeywords(cleanedMarkdown);
-  
-  const semanticKeywords = await generateSemanticKeywords(
-    primaryKeywords,
-    metadata.title,
-    headings.h1
-  );
+  const contentSnippet = extractContentSnippet(cleanedMarkdown, headings.h1);
   
   const wordCount = cleanedMarkdown.split(/\s+/).filter(word => word.length > 0).length;
-  
-  const embedding = await generateEmbedding(
-    metadata.title,
-    headings.h1,
-    headings.h2Tags,
-    headings.h3Tags,
-    headings.h4Tags,
-    primaryKeywords
-  );
 
   return {
     url: metadata.sourceURL || metadata.url,
@@ -224,9 +186,8 @@ export async function processPage(firecrawlData: any): Promise<ProcessedPage> {
     h3Tags: headings.h3Tags,
     h4Tags: headings.h4Tags,
     primaryKeywords,
-    semanticKeywords,
     wordCount,
-    embedding
+    contentSnippet
   };
 }
 
@@ -249,7 +210,7 @@ async function pageExistsInDatabase(url: string): Promise<boolean> {
 }
 
 /**
- * Store processed page in database
+ * Store processed page in database (no embedding initially)
  */
 async function storePage(page: ProcessedPage): Promise<void> {
   const { error } = await supabase
@@ -263,9 +224,10 @@ async function storePage(page: ProcessedPage): Promise<void> {
       h3_tags: page.h3Tags,
       h4_tags: page.h4Tags,
       primary_keywords: page.primaryKeywords,
-      semantic_keywords: page.semanticKeywords,
+      semantic_keywords: null, // Not using semantic keywords anymore
       word_count: page.wordCount,
-      embedding: page.embedding,
+      content_snippet: page.contentSnippet,
+      embedding: null, // Will be generated later in batch
       last_crawled: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }, {
@@ -324,7 +286,7 @@ async function updateCrawlJob(
 }
 
 /**
- * Start crawling a website
+ * Start crawling a website using Firecrawl's async API
  */
 export async function crawlWebsite(config: CrawlConfig): Promise<string> {
   const jobId = await createCrawlJob(config);
@@ -335,10 +297,10 @@ export async function crawlWebsite(config: CrawlConfig): Promise<string> {
       started_at: new Date().toISOString()
     });
 
-    console.log('Starting Firecrawl crawl for:', config.baseUrl);
+    console.log('Starting Firecrawl async crawl for:', config.baseUrl);
 
-    // Start Firecrawl crawl with better error handling
-    const crawlResponse = await firecrawl.crawlUrl(config.baseUrl, {
+    // Start Firecrawl async crawl - always returns id for large sites
+    const crawlResponse = await firecrawl.asyncCrawlUrl(config.baseUrl, {
       limit: config.maxPages,
       scrapeOptions: {
         formats: ['markdown'],
@@ -349,9 +311,9 @@ export async function crawlWebsite(config: CrawlConfig): Promise<string> {
       excludePaths: config.excludePatterns
     });
 
-    console.log('Firecrawl response:', crawlResponse);
+    console.log('Firecrawl async response:', crawlResponse);
 
-    // Better response validation
+    // Validate response structure
     if (!crawlResponse || typeof crawlResponse !== 'object') {
       throw new Error('Invalid response from Firecrawl API');
     }
@@ -360,29 +322,17 @@ export async function crawlWebsite(config: CrawlConfig): Promise<string> {
       throw new Error(`Firecrawl API error: ${crawlResponse.error}`);
     }
 
-    // --- type-guard for FirecrawlCrawlResponse --------------------------
-    function isCrawlResp(
-      resp: unknown
-    ): resp is FirecrawlCrawlResponse {
-      return (
-        typeof resp === 'object' &&
-        resp !== null &&
-        'jobId' in resp &&
-        typeof (resp as any).jobId === 'string'
-      );
+    // Validate id exists (asyncCrawlUrl always returns id)
+    if (!('id' in crawlResponse) || typeof crawlResponse.id !== 'string') {
+      console.error('Invalid Firecrawl async response structure:', crawlResponse);
+      throw new Error('Firecrawl async API did not return a valid job ID');
     }
 
-    // Validate jobId exists
-    if (!isCrawlResp(crawlResponse)) {
-      console.error('Invalid Firecrawl response structure:', crawlResponse);
-      throw new Error('Firecrawl did not return a valid job ID');
-    }
-
-    console.log('Firecrawl job started with ID:', crawlResponse.jobId);
+    console.log('Firecrawl async job started with ID:', crawlResponse.id);
 
     // Poll for completion and process results
     await pollAndProcessCrawl(
-      crawlResponse.jobId,
+      crawlResponse.id,
       jobId,
       config.forceRecrawl || false
     );
@@ -482,10 +432,12 @@ async function pollAndProcessCrawl(firecrawlJobId: string, dbJobId: string, forc
                 pages_crawled: pagesProcessed
               });
 
-              await new Promise(resolve => setTimeout(resolve, 500));
+              // Small delay to avoid overwhelming the database
+              await new Promise(resolve => setTimeout(resolve, 100));
 
             } catch (error) {
               console.error(`Failed to process page ${pageUrl}:`, error);
+              // Continue processing other pages even if one fails
             }
           }
         }
@@ -496,7 +448,7 @@ async function pollAndProcessCrawl(firecrawlJobId: string, dbJobId: string, forc
           pages_crawled: pagesProcessed
         });
 
-        console.log(`Crawl completed: ${pagesProcessed} pages processed`);
+        console.log(`Crawl completed: ${pagesProcessed} pages processed and stored`);
 
       } else if (status.status === 'failed') {
         throw new Error('Firecrawl job failed');
