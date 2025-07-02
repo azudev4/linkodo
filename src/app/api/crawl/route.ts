@@ -1,26 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { crawlWebsite, CrawlConfig } from '@/lib/services/crawler';
 
-// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-// Helper-type + guard – lets TypeScript know when the result is the
-// special "completed immediately" object.
-interface ImmediateCrawlResult {
-  jobId: string;
-  completedImmediately: boolean;
-  pagesProcessed: number;
-}
-
-function isImmediateCrawlResult(val: unknown): val is ImmediateCrawlResult {
-  return (
-    typeof val === 'object' &&
-    val !== null &&
-    'jobId' in val &&
-    'completedImmediately' in val &&
-    'pagesProcessed' in val
-  );
-}
-// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
 export async function POST(request: NextRequest) {
   console.log('Crawl API: POST request received');
   
@@ -158,41 +138,21 @@ export async function POST(request: NextRequest) {
     console.log('Crawl API: Starting crawl with validated config:', config);
 
     // Start the crawling process
-    const result = await crawlWebsite(config);
+    const jobId = await crawlWebsite(config);
 
-    console.log('Crawl API: Crawl result:', result);
+    console.log('Crawl API: Crawl started successfully with job ID:', jobId);
 
-    // Check if result indicates immediate completion
-    if (typeof result === 'object' && 'jobId' in result && 'completedImmediately' in result) {
-      return NextResponse.json({
-        success: true,
-        jobId: result.jobId,
-        completedImmediately: true,
-        pagesProcessed: result.pagesProcessed,
-        message: `Crawl completed immediately for ${config.baseUrl} (${result.pagesProcessed} pages processed)`,
-        config: {
-          baseUrl: config.baseUrl,
-          maxPages: config.maxPages,
-          excludePatterns: config.excludePatterns,
-          forceRecrawl: config.forceRecrawl
-        }
-      });
-    } else {
-      // Standard async response
-      const jobId = result as string;
-      return NextResponse.json({
-        success: true,
-        jobId,
-        completedImmediately: false,
-        message: `Crawl started for ${config.baseUrl} (max ${parsedMaxPages} pages)`,
-        config: {
-          baseUrl: config.baseUrl,
-          maxPages: config.maxPages,
-          excludePatterns: config.excludePatterns,
-          forceRecrawl: config.forceRecrawl
-        }
-      });
-    }
+    return NextResponse.json({
+      success: true,
+      jobId,
+      message: `Crawl started for ${config.baseUrl} (max ${parsedMaxPages} pages)`,
+      config: {
+        baseUrl: config.baseUrl,
+        maxPages: config.maxPages,
+        excludePatterns: config.excludePatterns,
+        forceRecrawl: config.forceRecrawl
+      }
+    });
 
   } catch (error) {
     console.error('Crawl API: Unexpected error:', error);
