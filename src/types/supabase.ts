@@ -58,7 +58,6 @@ export type Database = {
           h1: string | null
           h2_tags: string[] | null
           h3_tags: string[] | null
-          h4_tags: string[] | null
           id: string
           last_crawled: string | null
           meta_description: string | null
@@ -75,7 +74,6 @@ export type Database = {
           h1?: string | null
           h2_tags?: string[] | null
           h3_tags?: string[] | null
-          h4_tags?: string[] | null
           id?: string
           last_crawled?: string | null
           meta_description?: string | null
@@ -92,7 +90,6 @@ export type Database = {
           h1?: string | null
           h2_tags?: string[] | null
           h3_tags?: string[] | null
-          h4_tags?: string[] | null
           id?: string
           last_crawled?: string | null
           meta_description?: string | null
@@ -128,7 +125,6 @@ export type Database = {
           h1: string
           h2_tags: string[]
           h3_tags: string[]
-          h4_tags: string[]
           primary_keywords: string[]
           similarity: number
         }[]

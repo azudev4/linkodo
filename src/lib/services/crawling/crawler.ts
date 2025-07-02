@@ -1,5 +1,6 @@
 import FirecrawlApp from '@mendable/firecrawl-js';
 import { supabase } from '@/lib/db/client';
+import { processPage, storePage, ProcessedPage } from './page-processor';
 
 interface FirecrawlCrawlResponse {
   id: string;
@@ -33,163 +34,8 @@ export interface CrawlConfig {
   forceRecrawl?: boolean;
 }
 
-export interface ProcessedPage {
-  url: string;
-  title: string | null;
-  metaDescription: string | null;
-  h1: string | null;
-  h2Tags: string[];
-  h3Tags: string[];
-  h4Tags: string[];
-  primaryKeywords: string[];
-  wordCount: number;
-  contentSnippet: string | null;
-}
-
-/**
- * Clean Firecrawl markdown content by removing navigation and header junk
- */
-function cleanFirecrawlContent(markdown: string): string {
-  const firstHeading = markdown.indexOf('\n# ');
-  if (firstHeading > 0) {
-    return markdown.substring(firstHeading);
-  }
-  return markdown;
-}
-
-/**
- * Extract headings from cleaned markdown content
- */
-function extractHeadings(markdown: string) {
-  const h1Match = markdown.match(/^# (.+)$/m);
-  const h2Matches = markdown.match(/^## (.+)$/gm) || [];
-  const h3Matches = markdown.match(/^### (.+)$/gm) || [];
-  const h4Matches = markdown.match(/^#### (.+)$/gm) || [];
-
-  return {
-    h1: h1Match?.[1] || null,
-    h2Tags: h2Matches.map(h => h.replace('## ', '')),
-    h3Tags: h3Matches.map(h => h.replace('### ', '')),
-    h4Tags: h4Matches.map(h => h.replace('#### ', ''))
-  };
-}
-
-/**
- * Extract primary keywords using frequency analysis
- */
-function extractPrimaryKeywords(markdown: string): string[] {
-  const cleanText = markdown
-    .replace(/#{1,6}\s/g, '')
-    .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
-    .replace(/[^\w\sàâäéèêëïîôùûüÿç]/gi, ' ')
-    .toLowerCase();
-
-  const words = cleanText
-    .split(/\s+/)
-    .filter(word => word.length > 3);
-
-  const stopWords = new Set([
-    'dans', 'avec', 'pour', 'plus', 'tout', 'tous', 'toute', 'toutes',
-    'cette', 'cette', 'ces', 'son', 'ses', 'leur', 'leurs', 'notre',
-    'nos', 'votre', 'vos', 'mon', 'mes', 'ton', 'tes', 'que', 'qui',
-    'quoi', 'dont', 'où', 'quand', 'comment', 'pourquoi', 'parce',
-    'car', 'donc', 'mais', 'ou', 'et', 'ni', 'or', 'puis', 'alors',
-    'ainsi', 'aussi', 'encore', 'déjà', 'jamais', 'toujours', 'souvent',
-    'parfois', 'très', 'trop', 'assez', 'bien', 'mal', 'mieux', 'moins',
-    'beaucoup', 'peu', 'tant', 'autant', 'comme', 'si', 'sinon',
-    'peut', 'peuvent', 'doit', 'doivent', 'avoir', 'être', 'faire',
-    'dire', 'aller', 'voir', 'savoir', 'vouloir', 'venir', 'falloir'
-  ]);
-
-  const filteredWords = words.filter(word => !stopWords.has(word));
-
-  const wordFreq = filteredWords.reduce((acc, word) => {
-    acc[word] = (acc[word] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  return Object.entries(wordFreq)
-    .sort(([,a], [,b]) => b - a)
-    .slice(0, 15)
-    .map(([word]) => word);
-}
-
-/**
- * Extract content snippet between H1 and first H2
- */
-function extractContentSnippet(markdown: string, h1: string | null): string | null {
-  // Strategy 1: Extract between H1 and first H2 (most common blog structure)
-  if (h1) {
-    const h1Pattern = new RegExp(`^# ${h1.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'm');
-    const h1Match = markdown.match(h1Pattern);
-    
-    if (h1Match) {
-      const afterH1 = markdown.substring(h1Match.index! + h1Match[0].length);
-      const h2Match = afterH1.match(/^## .+$/m);
-      
-      const contentSection = h2Match 
-        ? afterH1.substring(0, h2Match.index!) 
-        : afterH1.substring(0, 500); // Fallback limit
-      
-      return cleanAndTruncateContent(contentSection);
-    }
-  }
-  
-  // Fallback: First substantial paragraph
-  const paragraphs = markdown.split('\n\n');
-  for (const paragraph of paragraphs) {
-    const cleaned = paragraph.replace(/^#+\s/, '').trim();
-    if (cleaned.length > 50 && !cleaned.startsWith('#')) {
-      return cleanAndTruncateContent(cleaned);
-    }
-  }
-  
-  return null;
-}
-
-function cleanAndTruncateContent(content: string): string {
-  const cleaned = content
-    .replace(/!\[.*?\]\(.*?\)/g, '') // Remove images
-    .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1') // Convert links to text
-    .replace(/[*_`]/g, '') // Remove formatting
-    .replace(/\n+/g, ' ') // Replace newlines with spaces
-    .trim();
-  
-  // Truncate to ~200 chars at word boundary
-  if (cleaned.length <= 200) return cleaned;
-  
-  const truncated = cleaned.substring(0, 200);
-  const lastSpace = truncated.lastIndexOf(' ');
-  return (lastSpace > 150 ? truncated.substring(0, lastSpace) : truncated) + '...';
-}
-
-/**
- * Process a single page from Firecrawl data (no AI dependencies)
- */
-export async function processPage(firecrawlData: any): Promise<ProcessedPage> {
-  const { markdown, metadata } = firecrawlData;
-  
-  const cleanedMarkdown = cleanFirecrawlContent(markdown);
-  const headings = extractHeadings(cleanedMarkdown);
-  
-  const primaryKeywords = extractPrimaryKeywords(cleanedMarkdown);
-  const contentSnippet = extractContentSnippet(cleanedMarkdown, headings.h1);
-  
-  const wordCount = cleanedMarkdown.split(/\s+/).filter(word => word.length > 0).length;
-
-  return {
-    url: metadata.sourceURL || metadata.url,
-    title: metadata.title || null,
-    metaDescription: metadata.description || null,
-    h1: headings.h1,
-    h2Tags: headings.h2Tags,
-    h3Tags: headings.h3Tags,
-    h4Tags: headings.h4Tags,
-    primaryKeywords,
-    wordCount,
-    contentSnippet
-  };
-}
+// Re-export ProcessedPage interface for backward compatibility
+export type { ProcessedPage };
 
 /**
  * Check if a page already exists in database
@@ -207,36 +53,6 @@ async function pageExistsInDatabase(url: string): Promise<boolean> {
   }
 
   return data && data.length > 0;
-}
-
-/**
- * Store processed page in database (no embedding initially)
- */
-async function storePage(page: ProcessedPage): Promise<void> {
-  const { error } = await supabase
-    .from('pages')
-    .upsert({
-      url: page.url,
-      title: page.title,
-      meta_description: page.metaDescription,
-      h1: page.h1,
-      h2_tags: page.h2Tags,
-      h3_tags: page.h3Tags,
-      h4_tags: page.h4Tags,
-      primary_keywords: page.primaryKeywords,
-      semantic_keywords: null, // Not using semantic keywords anymore
-      word_count: page.wordCount,
-      content_snippet: page.contentSnippet,
-      embedding: null, // Will be generated later in batch
-      last_crawled: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }, {
-      onConflict: 'url'
-    });
-
-  if (error) {
-    throw new Error(`Failed to store page: ${error.message}`);
-  }
 }
 
 /**
@@ -304,7 +120,7 @@ export async function crawlWebsite(config: CrawlConfig): Promise<string> {
       limit: config.maxPages,
       scrapeOptions: {
         formats: ['markdown'],
-        includeTags: ['title', 'meta', 'h1', 'h2', 'h3', 'h4'],
+        includeTags: ['title', 'meta', 'h1', 'h2', 'h3'],
         excludeTags: ['nav', 'footer', 'aside', 'script', 'style'],
         waitFor: 1000
       },
@@ -366,6 +182,11 @@ async function pollAndProcessCrawl(firecrawlJobId: string, dbJobId: string, forc
   let pollAttempts = 0;
   const maxPollAttempts = 120; // 10 minutes max (5s intervals)
 
+  // Stuck detection variables
+  let lastPageCount = 0;
+  let unchangedAttempts = 0;
+  const MAX_UNCHANGED_ATTEMPTS = 2; // Consider stuck after 10 seconds (2 * 5s) of no change
+
   const { data: jobData } = await supabase
     .from('crawl_jobs')
     .select('max_pages, base_url')
@@ -391,7 +212,32 @@ async function pollAndProcessCrawl(firecrawlJobId: string, dbJobId: string, forc
 
       console.log(`Job status: ${status.status}`);
 
-      if (status.status === 'completed') {
+      const currentPageCount = status.data?.length || 0;
+      console.log(`Current page count: ${currentPageCount}`);
+
+      // Check if page count is unchanged
+      if (currentPageCount === lastPageCount && status.status === 'scraping') {
+        unchangedAttempts++;
+        console.log(`Page count unchanged for ${unchangedAttempts} attempts`);
+        
+        if (unchangedAttempts >= MAX_UNCHANGED_ATTEMPTS && currentPageCount > 0) {
+          console.log(`Detected stuck state: Page count ${currentPageCount} unchanged for ${unchangedAttempts} attempts`);
+          console.log('Treating as completed to process discovered pages');
+          isComplete = true;
+          
+          await updateCrawlJob(dbJobId, {
+            pages_total: currentPageCount,
+            status: 'completed_partial',
+            error_message: `Crawl appeared stuck after discovering ${currentPageCount} pages. Processing available pages.`
+          });
+        }
+      } else {
+        // Reset counter if count changed
+        unchangedAttempts = 0;
+      }
+      lastPageCount = currentPageCount;
+
+      if (status.status === 'completed' || isComplete) {
         isComplete = true;
         
         const totalDiscovered = status.data?.length || 0;
@@ -443,7 +289,7 @@ async function pollAndProcessCrawl(firecrawlJobId: string, dbJobId: string, forc
         }
 
         await updateCrawlJob(dbJobId, {
-          status: 'completed',
+          status: isComplete ? 'completed_partial' : 'completed',
           completed_at: new Date().toISOString(),
           pages_crawled: pagesProcessed
         });

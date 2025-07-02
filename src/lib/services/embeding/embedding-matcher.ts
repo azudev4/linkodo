@@ -1,6 +1,8 @@
 import OpenAI from 'openai';
-import { findSimilarPages, SimilarPage } from '@/lib/db/client';
-import { AnchorCandidate } from './text-processor';
+import { findSimilarPages, SimilarPage, supabase } from '@/lib/db/client';
+import { AnchorCandidate } from '../text-processor';
+import { PageData } from '@/lib/db/client';
+import { generateEmbedding } from './embeddings';
 
 // Initialize OpenAI
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
@@ -10,7 +12,7 @@ export interface MatchOption {
   title: string;
   url: string;
   description: string;
-  matchedSection: string; // 'H1', 'H2', 'H3', 'H4', 'Keywords'
+  matchedSection: string; // 'H1', 'H2', 'H3', 'Keywords'
   matchedContent: string; // The actual content that matched
   relevanceScore: number;
 }
@@ -25,6 +27,14 @@ export interface MatchingResult {
   totalCandidates: number;
   totalMatches: number;
   averageScore: number;
+}
+
+export interface SuggestionMatch {
+  page: PageData;
+  score: number;
+  matchedSection: string; // 'H1', 'H2', 'H3', 'Keywords'
+  matchedContent: string;
+  reason: string;
 }
 
 /**
@@ -76,14 +86,7 @@ function determineMatchedSection(
     }
   }
   
-  // Check H4 matches
-  if (page.h4_tags) {
-    for (const h4 of page.h4_tags) {
-      if (h4.toLowerCase().includes(candidate)) {
-        return { section: 'H4', content: h4 };
-      }
-    }
-  }
+
   
   // Check primary keywords
   if (page.primary_keywords) {
@@ -300,4 +303,52 @@ export async function batchProcessAnchors(
   }
   
   return result;
+}
+
+function findBestMatch(page: PageData, candidates: string[]): { section: string; content: string } | null {
+  // Priority order: H1 > H2 > H3 > Keywords
+  
+  // Check H1 match
+  if (page.h1) {
+    for (const candidate of candidates) {
+      if (page.h1.toLowerCase().includes(candidate)) {
+        return { section: 'H1', content: page.h1 };
+      }
+    }
+  }
+
+  // Check H2 matches
+  if (page.h2_tags) {
+    for (const h2 of page.h2_tags) {
+      for (const candidate of candidates) {
+        if (h2.toLowerCase().includes(candidate)) {
+          return { section: 'H2', content: h2 };
+        }
+      }
+    }
+  }
+
+  // Check H3 matches
+  if (page.h3_tags) {
+    for (const h3 of page.h3_tags) {
+      for (const candidate of candidates) {
+        if (h3.toLowerCase().includes(candidate)) {
+          return { section: 'H3', content: h3 };
+        }
+      }
+    }
+  }
+
+  // Check keyword matches
+  if (page.primary_keywords) {
+    for (const keyword of page.primary_keywords) {
+      for (const candidate of candidates) {
+        if (keyword.toLowerCase().includes(candidate)) {
+          return { section: 'Keywords', content: keyword };
+        }
+      }
+    }
+  }
+
+  return null;
 }

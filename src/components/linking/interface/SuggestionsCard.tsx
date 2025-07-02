@@ -53,12 +53,12 @@ export function SuggestionCard({ suggestion, onAccept, onReject }: SuggestionCar
     onAccept(selectedOption);
   };
 
-  const getMatchedSectionColor = (section: string) => {
+  const getSectionColor = (section: string) => {
     switch (section) {
-      case 'H1': return 'bg-blue-100 text-blue-700';
-      case 'H2': return 'bg-green-100 text-green-700';
-      case 'H3': return 'bg-purple-100 text-purple-700';
-      case 'H4': return 'bg-orange-100 text-orange-700';
+      case 'H1': return 'bg-purple-100 text-purple-700';
+      case 'H2': return 'bg-blue-100 text-blue-700';
+      case 'H3': return 'bg-green-100 text-green-700';
+      case 'Keywords': return 'bg-yellow-100 text-yellow-700';
       default: return 'bg-gray-100 text-gray-700';
     }
   };
@@ -116,7 +116,7 @@ export function SuggestionCard({ suggestion, onAccept, onReject }: SuggestionCar
                     {topOption.title}
                   </h4>
                   <div className="flex items-center space-x-2 flex-shrink-0 ml-2">
-                    <Badge variant="outline" className={cn("text-xs", getMatchedSectionColor(topOption.matchedSection))}>
+                    <Badge variant="outline" className={cn("text-xs", getSectionColor(topOption.matchedSection))}>
                       {topOption.matchedSection}
                     </Badge>
                     <Badge variant="outline" className="text-xs">
@@ -199,7 +199,7 @@ export function SuggestionCard({ suggestion, onAccept, onReject }: SuggestionCar
                           {option.title}
                         </h4>
                         <div className="flex items-center space-x-2 flex-shrink-0 ml-2">
-                          <Badge variant="outline" className={cn("text-xs", getMatchedSectionColor(option.matchedSection))}>
+                          <Badge variant="outline" className={cn("text-xs", getSectionColor(option.matchedSection))}>
                             {option.matchedSection}
                           </Badge>
                           <Badge variant="outline" className="text-xs">

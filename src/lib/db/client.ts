@@ -18,7 +18,6 @@ export interface Page {
   h1: string | null;
   h2_tags: string[] | null;
   h3_tags: string[] | null;
-  h4_tags: string[] | null;
   primary_keywords: string[] | null;
   semantic_keywords: string[] | null;
   word_count: number | null;
@@ -50,7 +49,6 @@ export interface SimilarPage {
   h1: string | null;
   h2_tags: string[] | null;
   h3_tags: string[] | null;
-  h4_tags: string[] | null;
   primary_keywords: string[] | null;
   similarity: number;
 }
@@ -72,4 +70,38 @@ export async function findSimilarPages(
   }
 
   return data as SimilarPage[];
+}
+
+export interface PageData {
+  id: number;
+  url: string;
+  title: string | null;
+  meta_description: string | null;
+  h1: string | null;
+  h2_tags: string[] | null;
+  h3_tags: string[] | null;
+  primary_keywords: string[] | null;
+  semantic_keywords: string[] | null;
+  word_count: number | null;
+  content_snippet: string | null;
+  embedding: number[] | null;
+  last_crawled: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SuggestionData {
+  id: number;
+  url: string;
+  title: string | null;
+  h1: string | null;
+  h2_tags: string[] | null;
+  h3_tags: string[] | null;
+  primary_keywords: string[] | null;
+  content_snippet: string | null;
+  embedding: number[] | null;
+  word_count: number | null;
+  last_crawled: string | null;
+  created_at: string;
+  updated_at: string;
 }

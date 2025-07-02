@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { crawlWebsite, CrawlConfig } from '@/lib/services/crawler';
+import { crawlWebsite, CrawlConfig } from '@/lib/services/crawling/crawler';
 
 export async function POST(request: NextRequest) {
   console.log('Crawl API: POST request received');

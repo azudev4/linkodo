@@ -10,35 +10,26 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
  * Generate a semantic embedding vector for the provided page fields.
  */
 export async function generateEmbedding(
-  title: string | null,
-  h1: string | null,
+  title: string,
+  h1: string,
   h2Tags: string[],
   h3Tags: string[],
-  h4Tags: string[],
   primaryKeywords: string[]
 ): Promise<number[]> {
-  const embeddingText = [
+  const combinedText = [
     title,
     h1,
     ...h2Tags,
     ...h3Tags,
-    ...h4Tags,
     ...primaryKeywords
-  ]
-    .filter(Boolean)
-    .join(' ');
+  ].filter(Boolean).join(' ');
 
-  try {
-    const response = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: embeddingText,
-    });
+  const response = await openai.embeddings.create({
+    model: 'text-embedding-3-small',
+    input: combinedText,
+  });
 
-    return response.data[0].embedding;
-  } catch (error) {
-    console.error('Failed to generate embedding:', error);
-    throw error;
-  }
+  return response.data[0].embedding;
 }
 
 /**
@@ -55,7 +46,7 @@ export async function batchGenerateEmbeddings(batchSize: number = 50): Promise<{
     // Retrieve a batch of pages without embeddings
     const { data: pages, error } = await supabase
       .from('pages')
-      .select('id, title, h1, h2_tags, h3_tags, h4_tags, primary_keywords')
+      .select('id, title, h1, h2_tags, h3_tags, primary_keywords')
       .is('embedding', null)
       .range(offset, offset + batchSize - 1);
 
@@ -74,11 +65,10 @@ export async function batchGenerateEmbeddings(batchSize: number = 50): Promise<{
     for (const page of pages) {
       try {
         const embedding = await generateEmbedding(
-          page.title,
-          page.h1,
+          page.title || '',
+          page.h1 || '',
           page.h2_tags || [],
           page.h3_tags || [],
-          page.h4_tags || [],
           page.primary_keywords || []
         );
 
@@ -111,4 +101,66 @@ export async function batchGenerateEmbeddings(batchSize: number = 50): Promise<{
 
   console.log(`Batch embedding generation completed: ${processed} processed, ${failed} failed`);
   return { processed, failed };
+}
+
+export async function generateEmbeddingsForAllPages(): Promise<void> {
+  console.log('Starting batch embedding generation...');
+  
+  // Get all pages without embeddings
+  const { data: pages, error } = await supabase
+    .from('pages')
+    .select('id, title, h1, h2_tags, h3_tags, primary_keywords')
+    .is('embedding', null);
+
+  if (error) {
+    throw new Error(`Failed to fetch pages: ${error.message}`);
+  }
+
+  if (!pages || pages.length === 0) {
+    console.log('No pages found without embeddings');
+    return;
+  }
+
+  console.log(`Found ${pages.length} pages to process`);
+
+  // Process in batches to avoid rate limits
+  const batchSize = 10;
+  for (let i = 0; i < pages.length; i += batchSize) {
+    const batch = pages.slice(i, i + batchSize);
+    
+    await Promise.all(batch.map(async (page) => {
+      try {
+        const embedding = await generateEmbedding(
+          page.title || '',
+          page.h1 || '',
+          page.h2_tags || [],
+          page.h3_tags || [],
+          page.primary_keywords || []
+        );
+
+        const { error: updateError } = await supabase
+          .from('pages')
+          .update({ 
+            embedding: embedding,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', page.id);
+
+        if (updateError) {
+          console.error(`Failed to update page ${page.id}:`, updateError);
+        } else {
+          console.log(`✓ Generated embedding for page ${page.id}`);
+        }
+      } catch (error) {
+        console.error(`Failed to generate embedding for page ${page.id}:`, error);
+      }
+    }));
+
+    // Add delay between batches
+    if (i + batchSize < pages.length) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+
+  console.log('Batch embedding generation completed');
 } 
