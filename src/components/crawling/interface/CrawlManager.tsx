@@ -142,64 +142,93 @@ export function CrawlManager() {
   return (
     <div className="space-y-6">
       {/* Status Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Database className="w-5 h-5 text-blue-600" />
-            <span>Indexing Status</span>
+      <Card className="border-2 shadow-lg hover:shadow-xl transition-all duration-300">
+        <CardHeader className="space-y-3">
+          <CardTitle className="flex items-center space-x-3">
+            <div className="rounded-full bg-blue-100 p-2">
+              <Database className="w-5 h-5 text-blue-600" />
+            </div>
+            <span className="text-xl font-semibold text-blue-600">
+              Indexing Status
+            </span>
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-base text-muted-foreground">
             Current database status and indexing information
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <div className="text-2xl font-semibold text-gray-900">
+          <div className="grid grid-cols-2 gap-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-2 p-4 rounded-xl bg-gradient-to-br from-blue-50 to-white border border-blue-100"
+            >
+              <div className="text-3xl font-bold text-blue-600">
                 {indexedPages.toLocaleString()}
               </div>
-              <div className="text-sm text-gray-600">Pages indexed</div>
-            </div>
-            <div>
-              <div className="text-lg font-medium text-gray-700">
+              <div className="text-sm font-medium text-blue-600">Pages indexed</div>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.1 }}
+              className="space-y-2 p-4 rounded-xl bg-gradient-to-br from-gray-50 to-white border border-gray-100"
+            >
+              <div className="text-xl font-semibold text-gray-800">
                 {lastCrawl}
               </div>
-              <div className="text-sm text-gray-600">Last crawl</div>
-            </div>
+              <div className="text-sm font-medium text-gray-600">Last crawl</div>
+            </motion.div>
           </div>
         </CardContent>
       </Card>
 
       {/* Crawl Interface */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Globe className="w-5 h-5 text-green-600" />
-            <span>Start New Crawl</span>
+      <Card className="border-2 shadow-lg hover:shadow-xl transition-all duration-300">
+        <CardHeader className="space-y-3">
+          <CardTitle className="flex items-center space-x-3">
+            <div className="rounded-full bg-green-100 p-2">
+              <Globe className="w-5 h-5 text-green-600" />
+            </div>
+            <span className="text-xl font-semibold text-green-600">
+              Start New Crawl
+            </span>
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-base text-muted-foreground">
             Enter a website URL to begin crawling and indexing
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="url">Website URL</Label>
+        <CardContent className="space-y-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="space-y-3"
+          >
+            <Label htmlFor="url" className="text-sm font-medium text-gray-700">Website URL</Label>
             <Input
               id="url"
               placeholder="https://example.com"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               disabled={isCrawling}
+              className="h-12 px-4 border-2 rounded-xl focus:border-green-200 transition-colors duration-200"
             />
-          </div>
+          </motion.div>
 
           {/* Advanced Options */}
           <Collapsible open={isConfigOpen} onOpenChange={setIsConfigOpen}>
             <CollapsibleTrigger asChild>
-              <Button variant="ghost" className="w-full justify-between p-0 h-auto">
+              <Button 
+                variant="outline" 
+                className="w-full justify-between p-4 h-auto rounded-xl border-2 hover:bg-gray-50 hover:border-gray-200 transition-all duration-200"
+              >
                 <span className="flex items-center space-x-2">
-                  <Settings className="w-4 h-4" />
-                  <span className="text-sm">Advanced Options</span>
+                  <div className="rounded-full bg-gray-100 p-1.5">
+                    <Settings className="w-4 h-4 text-gray-600" />
+                  </div>
+                  <span className="text-sm font-medium">Advanced Options</span>
                 </span>
                 <motion.div
                   animate={{ rotate: isConfigOpen ? 180 : 0 }}
@@ -215,10 +244,10 @@ export function CrawlManager() {
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: 0.2 }}
-                className="space-y-4 pt-4"
+                className="space-y-6 p-4 mt-4 rounded-xl bg-gray-50 border-2"
               >
-                <div className="space-y-2">
-                  <Label>Max Pages: {maxPages[0]}</Label>
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Max Pages: {maxPages[0]}</Label>
                   <Slider
                     value={maxPages}
                     onValueChange={setMaxPages}
@@ -227,35 +256,39 @@ export function CrawlManager() {
                     step={5}
                     className="w-full"
                   />
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 italic">
                     Recommended: 5-20 pages for testing, 50-100 for production
                   </p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="exclude">Exclude Patterns (optional)</Label>
+                <div className="space-y-3">
+                  <Label htmlFor="exclude" className="text-sm font-medium">Exclude Patterns (optional)</Label>
                   <Input
                     id="exclude"
                     placeholder="/admin, /private, *.pdf"
                     value={excludePatterns}
                     onChange={(e) => setExcludePatterns(e.target.value)}
+                    className="h-10 border-2 rounded-lg focus:border-gray-300"
                   />
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 italic">
                     Comma-separated patterns to exclude from crawling
                   </p>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="force-recrawl"
-                    checked={forceRecrawl}
-                    onCheckedChange={(checked) => setForceRecrawl(checked as boolean)}
-                  />
-                  <Label htmlFor="force-recrawl" className="text-sm font-normal">
-                    Force recrawl existing pages
-                  </Label>
+                <div className="p-3 rounded-lg bg-white border-2 space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="force-recrawl"
+                      checked={forceRecrawl}
+                      onCheckedChange={(checked) => setForceRecrawl(checked as boolean)}
+                      className="border-2"
+                    />
+                    <Label htmlFor="force-recrawl" className="text-sm font-medium">
+                      Force recrawl existing pages
+                    </Label>
+                  </div>
+                  <p className="text-xs text-gray-500 italic">
+                    By default, pages already in database are skipped. Enable this to re-index everything.
+                  </p>
                 </div>
-                <p className="text-xs text-gray-500">
-                  By default, pages already in database are skipped. Enable this to re-index everything.
-                </p>
               </motion.div>
             </CollapsibleContent>
           </Collapsible>
@@ -265,43 +298,62 @@ export function CrawlManager() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="space-y-2"
+              className="space-y-3 p-4 rounded-xl bg-blue-50 border-2 border-blue-100"
             >
-              <div className="flex justify-between text-sm">
-                <span>
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-blue-700">
                   {currentJobId ? 
-                    `Crawling website... (Job: ${currentJobId.slice(0, 8)})` : 
+                    <>
+                      <span className="flex items-center">
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Crawling website...
+                      </span>
+                      <span className="text-xs text-blue-500 mt-1 block">
+                        Job ID: {currentJobId.slice(0, 8)}
+                      </span>
+                    </> : 
                     'Starting crawl...'
                   }
                 </span>
-                <span>{Math.round(crawlProgress)}%</span>
+                <span className="text-lg font-semibold text-blue-700">
+                  {Math.round(crawlProgress)}%
+                </span>
               </div>
-              <Progress value={crawlProgress} className="w-full" />
-              <p className="text-xs text-gray-500">
+              <Progress 
+                value={crawlProgress} 
+                className="w-full h-2.5 bg-blue-100" 
+              />
+              <p className="text-xs text-blue-600 flex items-center">
+                <Globe className="w-3 h-3 mr-1" />
                 Processing up to {maxPages[0]} pages • This may take a few minutes
               </p>
             </motion.div>
           )}
 
           {/* Start Button */}
-          <Button
-            onClick={handleStartCrawl}
-            disabled={!url.trim() || isCrawling}
-            className="w-full"
-            size="lg"
+          <motion.div
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
           >
-            {isCrawling ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Crawling...
-              </>
-            ) : (
-              <>
-                <Globe className="w-4 h-4 mr-2" />
-                Start Crawling
-              </>
-            )}
-          </Button>
+            <Button
+              onClick={handleStartCrawl}
+              disabled={!url.trim() || isCrawling}
+              className="w-full h-12 rounded-xl bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              size="lg"
+            >
+              {isCrawling ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  <span className="font-medium">Crawling...</span>
+                </>
+              ) : (
+                <>
+                  <Globe className="w-5 h-5 mr-2" />
+                  <span className="font-medium">Start Crawling</span>
+                </>
+              )}
+            </Button>
+          </motion.div>
         </CardContent>
       </Card>
     </div>

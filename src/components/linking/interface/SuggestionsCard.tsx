@@ -142,24 +142,34 @@ export function SuggestionCard({ suggestion, onAccept, onReject }: SuggestionCar
 
           {/* Show More Options Toggle */}
           {additionalOptions.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowAllOptions(!showAllOptions)}
-              className="w-full text-xs text-gray-600 hover:text-gray-900"
-            >
-              {showAllOptions ? (
-                <>
-                  <ChevronUp className="w-4 h-4 mr-1" />
-                  Hide other options
-                </>
-              ) : (
-                <>
-                  <ChevronDown className="w-4 h-4 mr-1" />
-                  See {additionalOptions.length} more option{additionalOptions.length > 1 ? 's' : ''}
-                </>
-              )}
-            </Button>
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAllOptions(!showAllOptions)}
+                className="text-xs px-4 py-2 rounded-full border-2 hover:bg-gray-50 transition-colors duration-200"
+              >
+                {showAllOptions ? (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex items-center text-gray-600"
+                  >
+                    <ChevronUp className="w-4 h-4 mr-1" />
+                    Hide other options
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex items-center text-blue-600"
+                  >
+                    <ChevronDown className="w-4 h-4 mr-1" />
+                    See {additionalOptions.length} more option{additionalOptions.length > 1 ? 's' : ''}
+                  </motion.div>
+                )}
+              </Button>
+            </div>
           )}
 
           {/* Additional Options (Expandable) */}
