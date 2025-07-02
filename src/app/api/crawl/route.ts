@@ -1,86 +1,255 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { crawlWebsite, CrawlConfig } from '@/lib/services/crawler';
 
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+// Helper-type + guard – lets TypeScript know when the result is the
+// special "completed immediately" object.
+interface ImmediateCrawlResult {
+  jobId: string;
+  completedImmediately: boolean;
+  pagesProcessed: number;
+}
+
+function isImmediateCrawlResult(val: unknown): val is ImmediateCrawlResult {
+  return (
+    typeof val === 'object' &&
+    val !== null &&
+    'jobId' in val &&
+    'completedImmediately' in val &&
+    'pagesProcessed' in val
+  );
+}
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
 export async function POST(request: NextRequest) {
+  console.log('Crawl API: POST request received');
+  
   try {
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (parseError) {
+      console.error('Crawl API: Failed to parse request body:', parseError);
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body' },
+        { status: 400 }
+      );
+    }
+
+    console.log('Crawl API: Request body:', body);
+    
     const { baseUrl, maxPages, excludePatterns, forceRecrawl } = body;
 
-    // Validation
-    if (!baseUrl) {
+    // Enhanced validation
+    if (!baseUrl || typeof baseUrl !== 'string') {
+      console.error('Crawl API: Missing or invalid baseUrl:', baseUrl);
       return NextResponse.json(
-        { error: 'Base URL is required' },
+        { error: 'Base URL is required and must be a string' },
+        { status: 400 }
+      );
+    }
+
+    // Clean up the URL
+    const cleanUrl = baseUrl.trim();
+    if (!cleanUrl) {
+      return NextResponse.json(
+        { error: 'Base URL cannot be empty' },
         { status: 400 }
       );
     }
 
     // Validate URL format
+    let validatedUrl: URL;
     try {
-      new URL(baseUrl);
-    } catch {
+      validatedUrl = new URL(cleanUrl);
+      
+      // Ensure it's HTTP or HTTPS
+      if (!['http:', 'https:'].includes(validatedUrl.protocol)) {
+        throw new Error('Only HTTP and HTTPS URLs are supported');
+      }
+    } catch (urlError) {
+      console.error('Crawl API: Invalid URL format:', cleanUrl, urlError);
       return NextResponse.json(
-        { error: 'Invalid URL format' },
+        { error: 'Invalid URL format. Please include http:// or https://' },
         { status: 400 }
       );
     }
 
     // Validate max pages
-    const parsedMaxPages = parseInt(maxPages) || 1000;
-    if (parsedMaxPages < 1 || parsedMaxPages > 5000) {
+    let parsedMaxPages = 10; // Default
+    if (maxPages !== undefined) {
+      if (typeof maxPages === 'number') {
+        parsedMaxPages = maxPages;
+      } else if (typeof maxPages === 'string') {
+        parsedMaxPages = parseInt(maxPages, 10);
+        if (isNaN(parsedMaxPages)) {
+          return NextResponse.json(
+            { error: 'Max pages must be a valid number' },
+            { status: 400 }
+          );
+        }
+      } else {
+        return NextResponse.json(
+          { error: 'Max pages must be a number' },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (parsedMaxPages < 1 || parsedMaxPages > 1000) {
       return NextResponse.json(
-        { error: 'Max pages must be between 1 and 5000' },
+        { error: 'Max pages must be between 1 and 1000' },
         { status: 400 }
       );
     }
 
     // Process exclude patterns
-    let processedExcludePatterns: string[] = [];
-    if (excludePatterns && typeof excludePatterns === 'string') {
-      processedExcludePatterns = excludePatterns
-        .split(',')
-        .map(pattern => pattern.trim())
-        .filter(pattern => pattern.length > 0);
+    let processedExcludePatterns: string[] | undefined = undefined;
+    if (excludePatterns) {
+      if (typeof excludePatterns === 'string') {
+        processedExcludePatterns = excludePatterns
+          .split(',')
+          .map(pattern => pattern.trim())
+          .filter(pattern => pattern.length > 0);
+        
+        if (processedExcludePatterns.length === 0) {
+          processedExcludePatterns = undefined;
+        }
+      } else if (Array.isArray(excludePatterns)) {
+        processedExcludePatterns = excludePatterns
+          .filter(pattern => typeof pattern === 'string' && pattern.trim().length > 0)
+          .map(pattern => pattern.trim());
+        
+        if (processedExcludePatterns.length === 0) {
+          processedExcludePatterns = undefined;
+        }
+      } else {
+        return NextResponse.json(
+          { error: 'Exclude patterns must be a string or array' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validate environment variables
+    if (!process.env.FIRECRAWL_API_KEY) {
+      console.error('Crawl API: FIRECRAWL_API_KEY not configured');
+      return NextResponse.json(
+        { error: 'Crawl service not configured. Please contact administrator.' },
+        { status: 500 }
+      );
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+      console.error('Crawl API: OPENAI_API_KEY not configured');
+      return NextResponse.json(
+        { error: 'AI service not configured. Please contact administrator.' },
+        { status: 500 }
+      );
     }
 
     const config: CrawlConfig = {
-      baseUrl: baseUrl.trim(),
+      baseUrl: validatedUrl.toString(),
       maxPages: parsedMaxPages,
-      excludePatterns: processedExcludePatterns.length > 0 ? processedExcludePatterns : undefined,
-      forceRecrawl: forceRecrawl || false
+      excludePatterns: processedExcludePatterns,
+      forceRecrawl: Boolean(forceRecrawl)
     };
 
-    console.log('Starting crawl with config:', config);
+    console.log('Crawl API: Starting crawl with validated config:', config);
 
     // Start the crawling process
-    const jobId = await crawlWebsite(config);
+    const result = await crawlWebsite(config);
 
-    return NextResponse.json({
-      success: true,
-      jobId,
-      message: `Crawl started for ${baseUrl} (max ${parsedMaxPages} pages)`
-    });
+    console.log('Crawl API: Crawl result:', result);
+
+    // Check if result indicates immediate completion
+    if (typeof result === 'object' && 'jobId' in result && 'completedImmediately' in result) {
+      return NextResponse.json({
+        success: true,
+        jobId: result.jobId,
+        completedImmediately: true,
+        pagesProcessed: result.pagesProcessed,
+        message: `Crawl completed immediately for ${config.baseUrl} (${result.pagesProcessed} pages processed)`,
+        config: {
+          baseUrl: config.baseUrl,
+          maxPages: config.maxPages,
+          excludePatterns: config.excludePatterns,
+          forceRecrawl: config.forceRecrawl
+        }
+      });
+    } else {
+      // Standard async response
+      const jobId = result as string;
+      return NextResponse.json({
+        success: true,
+        jobId,
+        completedImmediately: false,
+        message: `Crawl started for ${config.baseUrl} (max ${parsedMaxPages} pages)`,
+        config: {
+          baseUrl: config.baseUrl,
+          maxPages: config.maxPages,
+          excludePatterns: config.excludePatterns,
+          forceRecrawl: config.forceRecrawl
+        }
+      });
+    }
 
   } catch (error) {
-    console.error('Crawl API error:', error);
+    console.error('Crawl API: Unexpected error:', error);
+    
+    // Determine error type and appropriate response
+    let statusCode = 500;
+    let errorMessage = 'Failed to start crawl';
+    let errorDetails = 'Unknown error';
+
+    if (error instanceof Error) {
+      errorDetails = error.message;
+      
+      // Check for specific error types
+      if (error.message.includes('Firecrawl')) {
+        errorMessage = 'Crawl service error';
+        statusCode = 503; // Service Unavailable
+      } else if (error.message.includes('OpenAI')) {
+        errorMessage = 'AI service error';
+        statusCode = 503;
+      } else if (error.message.includes('database') || error.message.includes('Supabase')) {
+        errorMessage = 'Database error';
+        statusCode = 503;
+      } else if (error.message.includes('network') || error.message.includes('fetch')) {
+        errorMessage = 'Network error';
+        statusCode = 503;
+      }
+    }
     
     return NextResponse.json(
       { 
-        error: 'Failed to start crawl',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: errorMessage,
+        details: errorDetails,
+        timestamp: new Date().toISOString()
       },
-      { status: 500 }
+      { status: statusCode }
     );
   }
 }
 
 export async function GET(request: NextRequest) {
+  console.log('Crawl API: GET request received');
+  
   try {
-    // Get crawl status/statistics
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get('jobId');
 
     if (jobId) {
-      // Return specific job status
+      console.log('Crawl API: Fetching job status for:', jobId);
+      
+      // Validate jobId format (basic UUID check)
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jobId)) {
+        return NextResponse.json(
+          { error: 'Invalid job ID format' },
+          { status: 400 }
+        );
+      }
+
       const { supabase } = await import('@/lib/db/client');
       
       const { data, error } = await supabase
@@ -90,27 +259,40 @@ export async function GET(request: NextRequest) {
         .single();
 
       if (error) {
+        console.error('Crawl API: Database error fetching job:', error);
+        return NextResponse.json(
+          { error: 'Job not found or database error' },
+          { status: 404 }
+        );
+      }
+
+      if (!data) {
         return NextResponse.json(
           { error: 'Job not found' },
           { status: 404 }
         );
       }
 
+      console.log('Crawl API: Job status retrieved:', data.status);
+
       return NextResponse.json({
         success: true,
         job: data
       });
+
     } else {
-      // Return general crawl statistics
+      console.log('Crawl API: Fetching general crawl statistics');
+      
       const { supabase } = await import('@/lib/db/client');
       
-      // Get total pages indexed
-      const { data: pagesData, error: pagesError } = await supabase
+      // Get total pages indexed with better error handling
+      const { data: pagesData, error: pagesError, count: pagesCount } = await supabase
         .from('pages')
-        .select('id', { count: 'exact' });
+        .select('id', { count: 'exact', head: true });
 
       if (pagesError) {
-        throw pagesError;
+        console.error('Crawl API: Error fetching pages count:', pagesError);
+        throw new Error(`Failed to fetch pages count: ${pagesError.message}`);
       }
 
       // Get latest crawl jobs
@@ -118,30 +300,46 @@ export async function GET(request: NextRequest) {
         .from('crawl_jobs')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(5);
+        .limit(10);
 
       if (jobsError) {
-        throw jobsError;
+        console.error('Crawl API: Error fetching recent jobs:', jobsError);
+        throw new Error(`Failed to fetch recent jobs: ${jobsError.message}`);
       }
+
+      const stats = {
+        totalPages: pagesCount || 0,
+        recentJobs: jobsData || []
+      };
+
+      console.log('Crawl API: Statistics retrieved:', { totalPages: stats.totalPages, recentJobsCount: stats.recentJobs.length });
 
       return NextResponse.json({
         success: true,
-        stats: {
-          totalPages: pagesData?.length || 0,
-          recentJobs: jobsData || []
-        }
+        stats
       });
     }
 
   } catch (error) {
-    console.error('Crawl GET API error:', error);
+    console.error('Crawl API GET: Unexpected error:', error);
+    
+    let errorMessage = 'Failed to get crawl information';
+    let statusCode = 500;
+    
+    if (error instanceof Error) {
+      if (error.message.includes('database') || error.message.includes('Supabase')) {
+        errorMessage = 'Database error';
+        statusCode = 503;
+      }
+    }
     
     return NextResponse.json(
       { 
-        error: 'Failed to get crawl information',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: errorMessage,
+        details: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
       },
-      { status: 500 }
+      { status: statusCode }
     );
   }
 }

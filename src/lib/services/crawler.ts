@@ -32,7 +32,7 @@ export interface CrawlConfig {
   baseUrl: string;
   maxPages: number;
   excludePatterns?: string[];
-  forceRecrawl?: boolean; // New option to force re-indexing existing pages
+  forceRecrawl?: boolean;
 }
 
 export interface ProcessedPage {
@@ -53,7 +53,6 @@ export interface ProcessedPage {
  * Clean Firecrawl markdown content by removing navigation and header junk
  */
 function cleanFirecrawlContent(markdown: string): string {
-  // Remove everything before the first main heading (removes nav, header, etc.)
   const firstHeading = markdown.indexOf('\n# ');
   if (firstHeading > 0) {
     return markdown.substring(firstHeading);
@@ -82,19 +81,16 @@ function extractHeadings(markdown: string) {
  * Extract primary keywords using frequency analysis
  */
 function extractPrimaryKeywords(markdown: string): string[] {
-  // Remove markdown syntax and normalize text
   const cleanText = markdown
-    .replace(/#{1,6}\s/g, '') // Remove heading markers
-    .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1') // Extract link text
-    .replace(/[^\w\sàâäéèêëïîôùûüÿç]/gi, ' ') // Keep French characters
+    .replace(/#{1,6}\s/g, '')
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+    .replace(/[^\w\sàâäéèêëïîôùûüÿç]/gi, ' ')
     .toLowerCase();
 
-  // Split into words and filter
   const words = cleanText
     .split(/\s+/)
-    .filter(word => word.length > 3); // Only words longer than 3 chars
+    .filter(word => word.length > 3);
 
-  // French stop words (common words to exclude)
   const stopWords = new Set([
     'dans', 'avec', 'pour', 'plus', 'tout', 'tous', 'toute', 'toutes',
     'cette', 'cette', 'ces', 'son', 'ses', 'leur', 'leurs', 'notre',
@@ -110,13 +106,11 @@ function extractPrimaryKeywords(markdown: string): string[] {
 
   const filteredWords = words.filter(word => !stopWords.has(word));
 
-  // Calculate frequency
   const wordFreq = filteredWords.reduce((acc, word) => {
     acc[word] = (acc[word] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
-  // Return top 15 keywords
   return Object.entries(wordFreq)
     .sort(([,a], [,b]) => b - a)
     .slice(0, 15)
@@ -169,7 +163,6 @@ async function generateEmbedding(
   h4Tags: string[],
   primaryKeywords: string[]
 ): Promise<number[]> {
-  // Combine all content for embedding
   const embeddingText = [
     title,
     h1,
@@ -200,24 +193,19 @@ async function generateEmbedding(
 export async function processPage(firecrawlData: any): Promise<ProcessedPage> {
   const { markdown, metadata } = firecrawlData;
   
-  // Clean content and extract headings
   const cleanedMarkdown = cleanFirecrawlContent(markdown);
   const headings = extractHeadings(cleanedMarkdown);
   
-  // Extract keywords
   const primaryKeywords = extractPrimaryKeywords(cleanedMarkdown);
   
-  // Generate semantic keywords
   const semanticKeywords = await generateSemanticKeywords(
     primaryKeywords,
     metadata.title,
     headings.h1
   );
   
-  // Calculate word count
   const wordCount = cleanedMarkdown.split(/\s+/).filter(word => word.length > 0).length;
   
-  // Generate embedding
   const embedding = await generateEmbedding(
     metadata.title,
     headings.h1,
@@ -339,18 +327,18 @@ async function updateCrawlJob(
  * Start crawling a website
  */
 export async function crawlWebsite(config: CrawlConfig): Promise<string> {
-  // Create crawl job
   const jobId = await createCrawlJob(config);
 
   try {
-    // Update job status to running
     await updateCrawlJob(jobId, {
       status: 'running',
       started_at: new Date().toISOString()
     });
 
-    // Start Firecrawl crawl
-    const crawlJob = await firecrawl.crawlUrl(config.baseUrl, {
+    console.log('Starting Firecrawl crawl for:', config.baseUrl);
+
+    // Start Firecrawl crawl with better error handling
+    const crawlResponse = await firecrawl.crawlUrl(config.baseUrl, {
       limit: config.maxPages,
       scrapeOptions: {
         formats: ['markdown'],
@@ -359,19 +347,51 @@ export async function crawlWebsite(config: CrawlConfig): Promise<string> {
         waitFor: 1000
       },
       excludePaths: config.excludePatterns
-    }) as FirecrawlResponse;
+    });
 
-    if ('error' in crawlJob) {
-      throw new Error(`Failed to start Firecrawl job: ${crawlJob.error}`);
+    console.log('Firecrawl response:', crawlResponse);
+
+    // Better response validation
+    if (!crawlResponse || typeof crawlResponse !== 'object') {
+      throw new Error('Invalid response from Firecrawl API');
     }
 
+    if ('error' in crawlResponse) {
+      throw new Error(`Firecrawl API error: ${crawlResponse.error}`);
+    }
+
+    // --- type-guard for FirecrawlCrawlResponse --------------------------
+    function isCrawlResp(
+      resp: unknown
+    ): resp is FirecrawlCrawlResponse {
+      return (
+        typeof resp === 'object' &&
+        resp !== null &&
+        'jobId' in resp &&
+        typeof (resp as any).jobId === 'string'
+      );
+    }
+
+    // Validate jobId exists
+    if (!isCrawlResp(crawlResponse)) {
+      console.error('Invalid Firecrawl response structure:', crawlResponse);
+      throw new Error('Firecrawl did not return a valid job ID');
+    }
+
+    console.log('Firecrawl job started with ID:', crawlResponse.jobId);
+
     // Poll for completion and process results
-    await pollAndProcessCrawl(crawlJob.jobId, jobId, config.forceRecrawl || false);
+    await pollAndProcessCrawl(
+      crawlResponse.jobId,
+      jobId,
+      config.forceRecrawl || false
+    );
 
     return jobId;
 
   } catch (error) {
-    // Update job status to failed
+    console.error('Crawl error:', error);
+    
     await updateCrawlJob(jobId, {
       status: 'failed',
       completed_at: new Date().toISOString(),
@@ -386,10 +406,16 @@ export async function crawlWebsite(config: CrawlConfig): Promise<string> {
  * Poll Firecrawl job and process results
  */
 async function pollAndProcessCrawl(firecrawlJobId: string, dbJobId: string, forceRecrawl: boolean = false): Promise<void> {
+  // Validate jobId before starting
+  if (!firecrawlJobId || typeof firecrawlJobId !== 'string') {
+    throw new Error(`Invalid Firecrawl job ID: ${firecrawlJobId}`);
+  }
+
   let isComplete = false;
   let pagesProcessed = 0;
+  let pollAttempts = 0;
+  const maxPollAttempts = 120; // 10 minutes max (5s intervals)
 
-  // Get the job config
   const { data: jobData } = await supabase
     .from('crawl_jobs')
     .select('max_pages, base_url')
@@ -397,32 +423,36 @@ async function pollAndProcessCrawl(firecrawlJobId: string, dbJobId: string, forc
     .single();
 
   const maxPages = jobData?.max_pages || 1000;
-  const baseUrl = jobData?.base_url || '';
 
-  while (!isComplete) {
-    // Wait 5 seconds between polls
+  console.log(`Starting poll for Firecrawl job: ${firecrawlJobId}`);
+
+  while (!isComplete && pollAttempts < maxPollAttempts) {
     await new Promise(resolve => setTimeout(resolve, 5000));
+    pollAttempts++;
 
     try {
+      console.log(`Polling attempt ${pollAttempts}: Checking status for job ${firecrawlJobId}`);
+      
       const status = await firecrawl.checkCrawlStatus(firecrawlJobId) as FirecrawlStatusResult;
 
       if ('error' in status) {
         throw new Error(`Firecrawl status check failed: ${status.error}`);
       }
 
+      console.log(`Job status: ${status.status}`);
+
       if (status.status === 'completed') {
         isComplete = true;
         
-        // Update total pages discovered
         const totalDiscovered = status.data?.length || 0;
+        console.log(`Crawl completed: ${totalDiscovered} pages discovered`);
+        
         await updateCrawlJob(dbJobId, {
           pages_total: totalDiscovered
         });
 
-        // Process pages up to the limit
         if (status.data && Array.isArray(status.data)) {
           console.log(`Processing up to ${maxPages} pages from ${totalDiscovered} discovered pages`);
-          console.log(`Force recrawl: ${forceRecrawl ? 'enabled' : 'disabled'}`);
           
           for (let i = 0; i < status.data.length && pagesProcessed < maxPages; i++) {
             const pageData = status.data[i];
@@ -434,7 +464,6 @@ async function pollAndProcessCrawl(firecrawlJobId: string, dbJobId: string, forc
             }
 
             try {
-              // Check if page already exists (unless force recrawl is enabled)
               if (!forceRecrawl) {
                 const pageExists = await pageExistsInDatabase(pageUrl);
                 if (pageExists) {
@@ -445,47 +474,50 @@ async function pollAndProcessCrawl(firecrawlJobId: string, dbJobId: string, forc
 
               console.log(`Processing page ${pagesProcessed + 1}/${maxPages}: ${pageUrl}`);
               
-              // Process and store the page
               const processedPage = await processPage(pageData);
               await storePage(processedPage);
               pagesProcessed++;
 
-              // Update progress
               await updateCrawlJob(dbJobId, {
                 pages_crawled: pagesProcessed
               });
 
-              // Rate limiting between page processing
               await new Promise(resolve => setTimeout(resolve, 500));
 
             } catch (error) {
               console.error(`Failed to process page ${pageUrl}:`, error);
-              // Continue with other pages
             }
           }
         }
 
-        // Mark job as completed
         await updateCrawlJob(dbJobId, {
           status: 'completed',
           completed_at: new Date().toISOString(),
           pages_crawled: pagesProcessed
         });
 
-        console.log(`Crawl completed: ${pagesProcessed} pages processed out of ${totalDiscovered} discovered`);
+        console.log(`Crawl completed: ${pagesProcessed} pages processed`);
 
       } else if (status.status === 'failed') {
         throw new Error('Firecrawl job failed');
-      }
-      
-      // Update progress if crawling is still in progress
-      if (status.data?.length && !isComplete) {
-        console.log(`Firecrawl discovered ${status.data.length} pages so far...`);
+      } else {
+        // Still in progress
+        if (status.data?.length) {
+          console.log(`Firecrawl discovered ${status.data.length} pages so far...`);
+        }
       }
 
     } catch (error) {
-      console.error('Error polling crawl status:', error);
-      // Continue polling unless it's a fatal error
+      console.error(`Error polling crawl status (attempt ${pollAttempts}):`, error);
+      
+      // If we've tried many times and keep failing, give up
+      if (pollAttempts > 10) {
+        throw new Error(`Failed to poll crawl status after ${pollAttempts} attempts: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
     }
+  }
+
+  if (pollAttempts >= maxPollAttempts) {
+    throw new Error('Crawl polling timed out after 10 minutes');
   }
 }

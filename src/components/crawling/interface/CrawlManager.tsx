@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,23 +10,37 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Progress } from '@/components/ui/progress';
 import { Slider } from '@/components/ui/slider';
-import { Database, Globe, Settings, ChevronDown, Loader2 } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Database, Globe, Settings, ChevronDown, Loader2, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
+
+interface CrawlJob {
+  id: string;
+  base_url: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  pages_crawled: number;
+  pages_total: number | null;
+  max_pages: number;
+  started_at: string | null;
+  completed_at: string | null;
+  error_message: string | null;
+}
 
 export function CrawlManager() {
   const [url, setUrl] = useState('');
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isCrawling, setIsCrawling] = useState(false);
   const [crawlProgress, setCrawlProgress] = useState(0);
-  const [maxPages, setMaxPages] = useState([10]); // Default to 10 for testing
+  const [maxPages, setMaxPages] = useState([10]);
   const [excludePatterns, setExcludePatterns] = useState('');
   const [forceRecrawl, setForceRecrawl] = useState(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [currentJob, setCurrentJob] = useState<CrawlJob | null>(null);
 
-  // Real data - would be fetched from API
   const [indexedPages, setIndexedPages] = useState(1247);
   const [lastCrawl, setLastCrawl] = useState('June 25, 2025');
 
-  // Fetch current stats on component mount
   useEffect(() => {
     fetchCrawlStats();
   }, []);
@@ -39,7 +53,6 @@ export function CrawlManager() {
       if (data.success) {
         setIndexedPages(data.stats.totalPages);
         
-        // Get last crawl date from recent jobs
         if (data.stats.recentJobs.length > 0) {
           const lastJob = data.stats.recentJobs[0];
           const lastDate = new Date(lastJob.completed_at || lastJob.created_at);
@@ -55,14 +68,26 @@ export function CrawlManager() {
     }
   };
 
+  const clearMessages = () => {
+    setError(null);
+    setSuccess(null);
+  };
+
   const handleStartCrawl = async () => {
-    if (!url.trim()) return;
+    if (!url.trim()) {
+      setError('Please enter a valid URL');
+      return;
+    }
     
+    clearMessages();
     setIsCrawling(true);
     setCrawlProgress(0);
     setCurrentJobId(null);
+    setCurrentJob(null);
 
     try {
+      console.log('Starting crawl for:', url);
+      
       const response = await fetch('/api/crawl', {
         method: 'POST',
         headers: {
@@ -77,15 +102,32 @@ export function CrawlManager() {
       });
 
       const data = await response.json();
+      console.log('Crawl API response:', data);
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to start crawl');
+        throw new Error(data.error || `Server error: ${response.status}`);
       }
 
       if (data.success) {
         setCurrentJobId(data.jobId);
-        // Start polling for progress
-        pollCrawlProgress(data.jobId);
+        setSuccess(`Crawl started successfully! Job ID: ${data.jobId.slice(0, 8)}`);
+        
+        // Check if crawl completed immediately (sync mode)
+        if (data.completedImmediately) {
+          console.log('Crawl completed immediately');
+          setIsCrawling(false);
+          setCrawlProgress(100);
+          setSuccess(`Crawl completed immediately! Processed ${data.pagesProcessed || 0} pages.`);
+          
+          // Refresh stats and clear form
+          await fetchCrawlStats();
+          setUrl('');
+          setCurrentJobId(null);
+          setCurrentJob(null);
+        } else {
+          // Start polling for async crawl
+          pollCrawlProgress(data.jobId);
+        }
       } else {
         throw new Error(data.error || 'Crawl failed to start');
       }
@@ -93,54 +135,125 @@ export function CrawlManager() {
     } catch (error) {
       console.error('Crawl error:', error);
       setIsCrawling(false);
-      // You might want to show an error message to the user here
-      alert(error instanceof Error ? error.message : 'Failed to start crawl');
+      setError(error instanceof Error ? error.message : 'Failed to start crawl');
     }
   };
 
   const pollCrawlProgress = async (jobId: string) => {
+    let pollAttempts = 0;
+    const maxAttempts = 120; // 10 minutes max
+
+    console.log('Starting polling for job:', jobId);
+
     const pollInterval = setInterval(async () => {
+      pollAttempts++;
+      
+      if (pollAttempts > maxAttempts) {
+        clearInterval(pollInterval);
+        setIsCrawling(false);
+        setError('Crawl polling timed out after 10 minutes');
+        return;
+      }
+
       try {
         const response = await fetch(`/api/crawl?jobId=${jobId}`);
         const data = await response.json();
 
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to check crawl status');
+        }
+
         if (data.success && data.job) {
-          const job = data.job;
+          const job: CrawlJob = data.job;
+          setCurrentJob(job);
           
           // Calculate progress
           if (job.pages_total && job.pages_total > 0) {
             const progress = (job.pages_crawled / Math.min(job.pages_total, maxPages[0])) * 100;
             setCrawlProgress(Math.min(progress, 100));
+          } else if (job.pages_crawled > 0) {
+            // If we don't know total yet, show progress based on pages crawled
+            const estimatedProgress = Math.min((job.pages_crawled / maxPages[0]) * 100, 90);
+            setCrawlProgress(estimatedProgress);
           }
 
           // Check if completed
-          if (job.status === 'completed' || job.status === 'failed') {
+          if (job.status === 'completed') {
             clearInterval(pollInterval);
             setIsCrawling(false);
+            setCrawlProgress(100);
+            setSuccess(`Crawl completed successfully! Processed ${job.pages_crawled} pages.`);
             
-            if (job.status === 'completed') {
-              setCrawlProgress(100);
-              // Refresh stats
-              await fetchCrawlStats();
-              // Clear form
-              setUrl('');
-              setCurrentJobId(null);
-            } else {
-              alert(`Crawl failed: ${job.error_message || 'Unknown error'}`);
-            }
+            // Refresh stats and clear form
+            await fetchCrawlStats();
+            setUrl('');
+            setCurrentJobId(null);
+            setCurrentJob(null);
+            
+          } else if (job.status === 'failed') {
+            clearInterval(pollInterval);
+            setIsCrawling(false);
+            setError(`Crawl failed: ${job.error_message || 'Unknown error'}`);
+            setCurrentJob(null);
           }
         }
       } catch (error) {
         console.error('Error polling crawl progress:', error);
+        
+        // Don't stop polling for minor errors, but limit attempts
+        if (pollAttempts > 10) {
+          clearInterval(pollInterval);
+          setIsCrawling(false);
+          setError(`Failed to monitor crawl progress: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
       }
-    }, 3000); // Poll every 3 seconds
+    }, 3000);
 
-    // Clear interval after 10 minutes max
+    // Cleanup after 10 minutes
     setTimeout(() => clearInterval(pollInterval), 600000);
   };
 
   return (
     <div className="space-y-6">
+      {/* Error/Success Messages */}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            <Alert variant="destructive">
+              <XCircle className="h-4 w-4" />
+              <AlertDescription className="flex items-center justify-between">
+                <span>{error}</span>
+                <Button variant="ghost" size="sm" onClick={clearMessages}>
+                  Dismiss
+                </Button>
+              </AlertDescription>
+            </Alert>
+          </motion.div>
+        )}
+        
+        {success && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            <Alert className="border-green-200 bg-green-50">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <AlertDescription className="flex items-center justify-between text-green-800">
+                <span>{success}</span>
+                <Button variant="ghost" size="sm" onClick={clearMessages}>
+                  Dismiss
+                </Button>
+              </AlertDescription>
+            </Alert>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Status Card */}
       <Card className="border-2 shadow-lg hover:shadow-xl transition-all duration-300">
         <CardHeader className="space-y-3">
@@ -211,7 +324,10 @@ export function CrawlManager() {
               id="url"
               placeholder="https://example.com"
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={(e) => {
+                setUrl(e.target.value);
+                if (error) clearMessages(); // Clear error when user types
+              }}
               disabled={isCrawling}
               className="h-12 px-4 border-2 rounded-xl focus:border-green-200 transition-colors duration-200"
             />
@@ -223,6 +339,7 @@ export function CrawlManager() {
               <Button 
                 variant="outline" 
                 className="w-full justify-between p-4 h-auto rounded-xl border-2 hover:bg-gray-50 hover:border-gray-200 transition-all duration-200"
+                disabled={isCrawling}
               >
                 <span className="flex items-center space-x-2">
                   <div className="rounded-full bg-gray-100 p-1.5">
@@ -255,6 +372,7 @@ export function CrawlManager() {
                     min={5}
                     step={5}
                     className="w-full"
+                    disabled={isCrawling}
                   />
                   <p className="text-xs text-gray-500 italic">
                     Recommended: 5-20 pages for testing, 50-100 for production
@@ -268,6 +386,7 @@ export function CrawlManager() {
                     value={excludePatterns}
                     onChange={(e) => setExcludePatterns(e.target.value)}
                     className="h-10 border-2 rounded-lg focus:border-gray-300"
+                    disabled={isCrawling}
                   />
                   <p className="text-xs text-gray-500 italic">
                     Comma-separated patterns to exclude from crawling
@@ -280,6 +399,7 @@ export function CrawlManager() {
                       checked={forceRecrawl}
                       onCheckedChange={(checked) => setForceRecrawl(checked as boolean)}
                       className="border-2"
+                      disabled={isCrawling}
                     />
                     <Label htmlFor="force-recrawl" className="text-sm font-medium">
                       Force recrawl existing pages
@@ -293,47 +413,58 @@ export function CrawlManager() {
             </CollapsibleContent>
           </Collapsible>
 
-          {/* Progress Bar */}
+          {/* Progress Section */}
           {isCrawling && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="space-y-3 p-4 rounded-xl bg-blue-50 border-2 border-blue-100"
+              className="space-y-4 p-4 rounded-xl bg-blue-50 border-2 border-blue-100"
             >
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-blue-700">
-                  {currentJobId ? 
-                    <>
-                      <span className="flex items-center">
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Crawling website...
-                      </span>
-                      <span className="text-xs text-blue-500 mt-1 block">
-                        Job ID: {currentJobId.slice(0, 8)}
-                      </span>
-                    </> : 
-                    'Starting crawl...'
-                  }
-                </span>
+                <div>
+                  <div className="flex items-center text-blue-700">
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    <span className="font-medium">
+                      {currentJob?.status === 'running' ? 'Crawling website...' : 'Starting crawl...'}
+                    </span>
+                  </div>
+                  {currentJobId && (
+                    <span className="text-xs text-blue-500 mt-1 block">
+                      Job ID: {currentJobId.slice(0, 8)}
+                    </span>
+                  )}
+                </div>
                 <span className="text-lg font-semibold text-blue-700">
                   {Math.round(crawlProgress)}%
                 </span>
               </div>
+              
               <Progress 
                 value={crawlProgress} 
                 className="w-full h-2.5 bg-blue-100" 
               />
-              <p className="text-xs text-blue-600 flex items-center">
-                <Globe className="w-3 h-3 mr-1" />
-                Processing up to {maxPages[0]} pages • This may take a few minutes
-              </p>
+              
+              <div className="flex items-center justify-between text-xs text-blue-600">
+                <div className="flex items-center">
+                  <Globe className="w-3 h-3 mr-1" />
+                  Processing up to {maxPages[0]} pages
+                </div>
+                {currentJob && (
+                  <div className="text-right">
+                    <div>Pages: {currentJob.pages_crawled}{currentJob.pages_total ? ` / ${Math.min(currentJob.pages_total, maxPages[0])}` : ''}</div>
+                    {currentJob.pages_total && currentJob.pages_total > maxPages[0] && (
+                      <div className="text-blue-500">({currentJob.pages_total} total found)</div>
+                    )}
+                  </div>
+                )}
+              </div>
             </motion.div>
           )}
 
           {/* Start Button */}
           <motion.div
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
+            whileHover={{ scale: isCrawling ? 1 : 1.01 }}
+            whileTap={{ scale: isCrawling ? 1 : 0.99 }}
           >
             <Button
               onClick={handleStartCrawl}
