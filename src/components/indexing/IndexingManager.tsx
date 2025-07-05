@@ -20,7 +20,9 @@ import {
   RefreshCw,
   BarChart3,
   Clock,
-  Zap
+  Zap,
+  FileSpreadsheet,
+  FileText
 } from 'lucide-react';
 
 interface OnCrawlWorkspace {
@@ -147,7 +149,7 @@ export function IndexingManager() {
     }
   };
 
-  const handleDownloadCSV = async () => {
+  const handleDownload = async (format: 'excel' | 'csv') => {
     if (!selectedProject) return;
     
     const project = projects.find(p => p.id === selectedProject);
@@ -159,24 +161,25 @@ export function IndexingManager() {
     }
     
     try {
-      const response = await fetch(`/api/oncrawl?action=download&crawlId=${latestCrawlId}`);
+      const response = await fetch(`/api/oncrawl?action=download&crawlId=${latestCrawlId}&format=${format}`);
       
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `oncrawl-pages-${latestCrawlId}.csv`;
+        const extension = format === 'excel' ? 'xlsx' : 'csv';
+        a.download = `oncrawl-pages-${latestCrawlId}.${extension}`;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        setSuccess('CSV downloaded successfully');
+        setSuccess(`${format.toUpperCase()} downloaded successfully`);
       } else {
-        setError('Failed to download CSV');
+        setError(`Failed to download ${format.toUpperCase()}`);
       }
     } catch (error) {
-      setError('Error downloading CSV');
+      setError(`Error downloading ${format.toUpperCase()}`);
       console.error('Download error:', error);
     }
   };
@@ -423,17 +426,32 @@ export function IndexingManager() {
                 </>
               )}
             </Button>
-            
-            <Button
-              onClick={handleDownloadCSV}
-              disabled={!selectedProject}
-              variant="outline"
-              className="h-12 px-6 rounded-xl border-2 hover:bg-gray-50 transition-all duration-200"
-              size="lg"
-            >
-              <Download className="w-5 h-5 mr-2" />
-              <span className="font-medium">Debug CSV</span>
-            </Button>
+          </div>
+
+          {/* Download Options */}
+          <div className="space-y-3">
+            <div className="text-sm font-medium text-gray-700">Debug Export:</div>
+            <div className="flex gap-3">
+              <Button
+                onClick={() => handleDownload('excel')}
+                disabled={!selectedProject}
+                variant="outline"
+                className="flex-1 h-10 rounded-lg border-2 hover:bg-green-50 hover:text-green-600 hover:border-green-200 transition-all duration-200"
+              >
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                <span className="font-medium">Excel (.xlsx)</span>
+              </Button>
+              
+              <Button
+                onClick={() => handleDownload('csv')}
+                disabled={!selectedProject}
+                variant="outline"
+                className="flex-1 h-10 rounded-lg border-2 hover:bg-gray-50 hover:text-gray-600 hover:border-gray-200 transition-all duration-200"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                <span className="font-medium">CSV (legacy)</span>
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

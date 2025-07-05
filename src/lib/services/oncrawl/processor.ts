@@ -45,9 +45,11 @@ function extractKeywords(content: string | null, title: string | null, h1: strin
 }
 
 /**
- * Extract content snippet from full content
+ * Extract content snippet from title and meta description
  */
-function extractContentSnippet(content: string | null): string | null {
+function extractContentSnippet(title: string | null, metaDescription: string | null): string | null {
+  const content = [title, metaDescription].filter(Boolean).join(' - ');
+  
   if (!content) return null;
   
   const cleaned = content
@@ -66,22 +68,29 @@ function extractContentSnippet(content: string | null): string | null {
  * Process OnCrawl page data to our standard format
  */
 export function processOnCrawlPage(page: OnCrawlPage): ProcessedOnCrawlPage {
-  // Convert h2/h3 strings to arrays if they're not already
-  const h2Tags = Array.isArray(page.h2) ? page.h2 : (page.h2 ? [page.h2] : []);
-  const h3Tags = Array.isArray(page.h3) ? page.h3 : (page.h3 ? [page.h3] : []);
+  // Map OnCrawl API fields to our internal structure
+  const url = page.url;
+  const title = page.title;
+  const h1 = page.h1;
+  const metaDescription = page.meta_description;
+  const statusCode = page.status_code ? parseInt(page.status_code) : null;
+  const wordCount = page.word_count ? parseInt(page.word_count) : 0;
   
-  const primaryKeywords = extractKeywords(page.content, page.title, page.h1);
-  const contentSnippet = extractContentSnippet(page.content);
+  console.log('🔍 DEBUG: Processing page:', { url, title, h1, statusCode, wordCount });
+  
+  // Since OnCrawl API doesn't have h2/h3 tags, we'll extract keywords from available content
+  const primaryKeywords = extractKeywords(null, title, h1);
+  const contentSnippet = extractContentSnippet(title, metaDescription);
 
   return {
-    url: page.url,
-    title: page.title,
-    metaDescription: page.meta_description,
-    h1: page.h1,
-    h2Tags,
-    h3Tags,
+    url,
+    title,
+    metaDescription,
+    h1,
+    h2Tags: [], // Not available in OnCrawl API response
+    h3Tags: [], // Not available in OnCrawl API response
     primaryKeywords,
-    wordCount: page.word_count || 0,
+    wordCount,
     contentSnippet
   };
 }
@@ -131,17 +140,25 @@ export async function syncPagesFromOnCrawl(
   
   // Filter out pages that shouldn't be indexed
   const indexablePages = pages.filter(page => {
+    const url = page.url;
+    
+    if (!url) {
+      console.log('Excluding page: No URL provided');
+      return false;
+    }
+    
     // Check URL patterns first
-    const shouldExcludeByUrl = shouldExcludeUrl(page.url);
+    const shouldExcludeByUrl = shouldExcludeUrl(url);
     if (shouldExcludeByUrl) {
-      const reason = getExclusionReason(page.url);
-      console.log(`Excluding page: ${page.url} - ${reason}`);
+      const reason = getExclusionReason(url);
+      console.log(`Excluding page: ${url} - ${reason}`);
       return false;
     }
     
     // Check status code - only index 200 or empty/null status codes
-    if (page.status_code && page.status_code !== 200) {
-      console.log(`Excluding page: ${page.url} - Status code: ${page.status_code}`);
+    const statusCode = page.status_code ? parseInt(page.status_code) : null;
+    if (statusCode && statusCode !== 200) {
+      console.log(`Excluding page: ${url} - Status code: ${statusCode}`);
       return false;
     }
     

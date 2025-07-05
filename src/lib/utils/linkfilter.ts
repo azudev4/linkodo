@@ -6,6 +6,7 @@ export const SITE_SPECIFIC_EXCLUDED_PATTERNS = [
   // Forum and legacy content
   '.html',  // Exclude old forum pages
   '.htm',   // Exclude old forum pages
+  'tags',   // Exclude tags (category in systemd)
 ];
 
 /**

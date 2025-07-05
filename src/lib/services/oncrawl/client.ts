@@ -3,7 +3,7 @@
 /**
  * Properly parses a CSV line respecting quoted fields
  */
-function parseCSVLine(line: string, delimiter: string = ';'): (string | null)[] {
+function parseCSVLine(line: string, delimiter: string = ','): (string | null)[] {
   const result = [];
   let current = '';
   let inQuotes = false;
@@ -52,19 +52,14 @@ interface OnCrawlCrawl {
   state?: string;
 }
 
+// Updated interface to match OnCrawl API field names (semicolon-delimited)
 interface OnCrawlPage {
   url: string;
   title: string | null;
+  status_code: string | null;
+  word_count: string | null;
   h1: string | null;
-  h2: string[] | null;
-  h3: string[] | null;
   meta_description: string | null;
-  status_code: number;
-  inrank: number | null;
-  nb_inlinks: number | null;
-  content: string | null;
-  word_count: number | null;
-  last_crawled: string;
 }
 
 class OnCrawlClient {
@@ -97,9 +92,15 @@ class OnCrawlClient {
       
       if (lines.length === 0) return [] as T;
       
-      const headers = parseCSVLine(lines[0]);
+      console.log('🔍 DEBUG: Raw CSV first line (headers):', lines[0]);
+      if (lines.length > 1) {
+        console.log('🔍 DEBUG: Raw CSV second line (data):', lines[1]);
+      }
+      
+      // OnCrawl API uses semicolon delimiter, not comma
+      const headers = parseCSVLine(lines[0], ';');
       const jsonObjects = lines.slice(1).map(line => {
-        const values = parseCSVLine(line);
+        const values = parseCSVLine(line, ';');
         const obj: any = {};
         headers.forEach((header, i) => {
           if (header !== null) {
@@ -108,6 +109,11 @@ class OnCrawlClient {
         });
         return obj;
       });
+      
+      console.log('🔍 DEBUG: Parsed headers:', headers);
+      if (jsonObjects.length > 0) {
+        console.log('🔍 DEBUG: First parsed object:', JSON.stringify(jsonObjects[0], null, 2));
+      }
       
       return jsonObjects as T;
     }
@@ -147,20 +153,37 @@ class OnCrawlClient {
     const fieldsResponse = await this.request<{ fields: Array<{ name: string }> }>(`/data/crawl/${crawlId}/pages/fields`);
     const availableFields = fieldsResponse.fields.map(field => field.name);
     
-    const desiredFields = [
-      'url', 'title', 'h1', 'h2', 'h3', 
-      'status_code', 'inrank', 'nb_inlinks', 'content', 'word_count'
-    ];
+    console.log('🔍 DEBUG: Available fields from OnCrawl:', availableFields);
     
-    const validFields = desiredFields.filter(field => availableFields.includes(field));
+    // Map to OnCrawl internal field names (these might be different from CSV export)
+    const fieldMapping: { [key: string]: string } = {
+      'url': 'url',
+      'title': 'title', 
+      'h1': 'h1',
+      'status_code': 'status_code',
+      'word_count': 'word_count',
+      'meta_description': 'meta_description'
+    };
+    
+    const desiredFields = Object.keys(fieldMapping).filter(field => 
+      availableFields.includes(field)
+    );
+    
+    console.log('🔍 DEBUG: Desired fields we are requesting:', desiredFields);
     
     const pages = await this.request<OnCrawlPage[]>(`/data/crawl/${crawlId}/pages?export=true`, {
       method: 'POST',
       body: JSON.stringify({
-        fields: validFields,
+        fields: desiredFields,
         oql: { field: ["depth", "has_value", ""] }
       }),
     });
+
+    console.log('🔍 DEBUG: Number of pages returned:', pages.length);
+    if (pages.length > 0) {
+      console.log('🔍 DEBUG: First page object:', JSON.stringify(pages[0], null, 2));
+      console.log('🔍 DEBUG: First page URL field:', pages[0].url);
+    }
 
     return pages;
   }
