@@ -22,7 +22,152 @@ export const SITE_SPECIFIC_EXCLUDED_PATTERNS = [
   '/13',
   '/14',
   '/15',
+  '/16',
+  '/17',
+  '/18',
+  '/19',
+  '/20',
+  '/21',
+  '/22',
+  '/23',
+  '/24',
+  '/25',
+  '/26',
+  '/27',
+  '/28',
+  '/29',
+  '/30',
+  '/31',
+  '/32',
+  '/33',
+  '/34',
+  '/35',
+  '/36',
+  '/37',
+  '/38',
+  '/39',
+  '/40',
+  '/41',
+  '/42',
+  '/43',
 ];
+
+/**
+ * Forum-specific patterns to detect in meta descriptions
+ * Only obvious indicators that wouldn't appear in editorial content
+ */
+export const FORUM_INDICATORS = [
+  // First person pronouns (obvious forum indicators)
+  'je', 'j\'ai', 'j\'aimerais', 'j\'aurais', 'j\'espère', 'j\'aurai',
+  'mon', 'ma', 'mes', 
+  'moi je', 'nous avons', 'nous voulons', 'nous venons', 'pensez-vous', 
+  
+  // Personal appeals (obvious forum language)
+  'quelqu\'un peut', 'personne sait', 'qui peut m\'aider',
+  'besoin d\'aide', 'aidez-moi',
+
+  // Forum-specific questions
+  'pouvez-vous', 'peux-tu', 'peux-tu m\'aider',
+  
+  // Forum-specific phrases
+  'merci d\'avance', 'svp', 's\'il vous plaît',
+  
+  // Informal greetings/closings
+  'salut', 'coucou', 'bonsoir les amis', 'bonjour', 'bonsoir', 'hello', 'coucou',
+  
+  // SMS/internet slang (dead giveaway) - EXACT MATCHES ONLY
+  '\\bbcp\\b', '\\bqq1\\b', '\\bqqun\\b', '\\bpr\\b', '\\bds\\b', '\\bvs\\b', '\\bmdr\\b', '\\blol\\b',
+  'c\'', 'sé', '\\bpa\\b', '\\bke\\b', '\\bki\\b',
+  
+  // Informal punctuation patterns
+  '!!!', '???', '!!', '....',
+  
+  // Direct personal context
+  'chez moi', 'dans ma', 'dans mon',
+  'j\'habite', 'on a', 'on habite'
+];
+
+/**
+ * Check if meta description contains forum indicators
+ */
+export function isForumContent(metaDescription: string): boolean {
+  if (!metaDescription) return false;
+  
+  const text = metaDescription.toLowerCase();
+  
+  return FORUM_INDICATORS.some(indicator => {
+    // If indicator starts with \b, it's a regex pattern for exact word matching
+    if (indicator.startsWith('\\b')) {
+      const regex = new RegExp(indicator, 'i');
+      return regex.test(text);
+    }
+    // Otherwise, use simple includes for phrases and longer patterns
+    return text.includes(indicator.toLowerCase());
+  });
+}
+
+/**
+ * Enhanced link filtering with forum detection
+ */
+export interface FilterResult {
+  isFiltered: boolean;
+  reason: string;
+  confidence: 'low' | 'medium' | 'high';
+}
+
+export function filterLink(
+  url: string, 
+  title?: string, 
+  metaDescription?: string
+): FilterResult {
+  
+  // Check for forum content in meta description
+  if (metaDescription && isForumContent(metaDescription)) {
+    return {
+      isFiltered: true,
+      reason: 'probable_forum',
+      confidence: 'high'
+    };
+  }
+
+  // URL pattern filters
+  const urlPatterns = [
+    /forum/i,
+    /discussion/i,
+    /topic/i,
+    /thread/i,
+    /post/i,
+    /comment/i
+  ];
+
+  for (const pattern of urlPatterns) {
+    if (pattern.test(url)) {
+      return {
+        isFiltered: true,
+        reason: 'forum_url_pattern',
+        confidence: 'medium'
+      };
+    }
+  }
+
+  return {
+    isFiltered: false,
+    reason: '',
+    confidence: 'low'
+  };
+}
+
+/**
+ * Check if a link should be included based on forum detection
+ */
+export function shouldIncludeLink(
+  url: string,
+  title?: string,
+  metaDescription?: string
+): boolean {
+  const result = filterLink(url, title, metaDescription);
+  return !result.isFiltered;
+}
 
 /**
  * =========================================
@@ -520,8 +665,11 @@ export const EXCLUDED_QUERY_PARAMS = [
 /**
  * Check if a URL should be excluded from indexing
  */
-export function shouldExcludeUrl(url: string): boolean {
+export function shouldExcludeUrl(url: string, metaDescription?: string): boolean {
   if (!url) return true;
+  
+  // Check for forum content in meta description
+  if (metaDescription && isForumContent(metaDescription)) return true;
   
   try {
     const urlObj = new URL(url);
@@ -529,13 +677,11 @@ export function shouldExcludeUrl(url: string): boolean {
     const search = urlObj.search.toLowerCase();
     const pathSegments = pathname.split('/').filter(Boolean);
     
-    // Check all exclusion patterns
     if (SITE_SPECIFIC_EXCLUDED_PATTERNS.some(pattern => pathname.includes(pattern))) return true;
     if (EXCLUDED_URL_PATTERNS.some(pattern => pathSegments.includes(pattern.split('/').filter(Boolean)[0]))) return true;
     if (EXCLUDED_FILE_EXTENSIONS.some(ext => pathname.endsWith(ext))) return true;
     if (EXCLUDED_QUERY_PARAMS.some(param => search.includes(param + '='))) return true;
     
-    // Path-based rules
     if (pathSegments.length > 6) return true;
     if (pathSegments.some(segment => /^\d+$/.test(segment) && segment.length > 6)) return true;
     
@@ -555,8 +701,16 @@ export function filterIndexableUrls(urls: string[]): string[] {
 /**
  * Get exclusion reason for debugging
  */
-export function getExclusionReason(url: string): string | null {
+export function getExclusionReason(url: string, metaDescription?: string): string | null {
   if (!url) return 'Empty URL';
+  
+  // Check forum content first
+  if (metaDescription && isForumContent(metaDescription)) {
+    const foundIndicator = FORUM_INDICATORS.find(indicator => 
+      metaDescription.toLowerCase().includes(indicator.toLowerCase())
+    );
+    return `Forum '${foundIndicator}' detected`;
+  }
   
   try {
     const urlObj = new URL(url);

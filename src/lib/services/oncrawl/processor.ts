@@ -120,16 +120,17 @@ export async function syncPagesFromOnCrawl(
   // 2. Apply business rules - filter excludable pages (processor responsibility)
   const indexablePages = pages.filter(page => {
     const url = page.url;
+    const metaDescription = page.meta_description ?? undefined;
     
     if (!url) {
       console.log('Excluding page: No URL provided');
       return false;
     }
     
-    // Business rule: Check URL patterns
-    const shouldExcludeByUrl = shouldExcludeUrl(url);
+    // Business rule: Check URL patterns and meta description
+    const shouldExcludeByUrl = shouldExcludeUrl(url, metaDescription);
     if (shouldExcludeByUrl) {
-      const reason = getExclusionReason(url);
+      const reason = getExclusionReason(url, metaDescription);
       console.log(`Excluding page: ${url} - ${reason}`);
       return false;
     }

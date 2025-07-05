@@ -23,10 +23,10 @@ function generateExcel(pages: any[]): Buffer {
     const internalOutlinks = page.internal_outlinks || '';     // CORRECTED
     const nbInlinks = page.nb_inlinks || '';
     
-    // Determine if page should be excluded
-    const shouldExclude = shouldExcludeUrl(url) || (statusCode && parseInt(statusCode) !== 200);
+    // Determine if page should be excluded - now with meta description
+    const shouldExclude = shouldExcludeUrl(url, metaDescription) || (statusCode && parseInt(statusCode) !== 200);
     const exclusionReason = shouldExclude ? 
-      (getExclusionReason(url) || `Status code: ${statusCode}`) : 
+      (getExclusionReason(url, metaDescription) || `Status code: ${statusCode}`) : 
       '';
     
     return {
@@ -99,9 +99,10 @@ function generateCSV(pages: any[]): string {
     const internalOutlinks = page.internal_outlinks || '';     // CORRECTED
     const nbInlinks = page.nb_inlinks || '';
     
-    const shouldExclude = shouldExcludeUrl(url) || (statusCode && parseInt(statusCode) !== 200);
+    // Updated to include meta description in exclusion checks
+    const shouldExclude = shouldExcludeUrl(url, metaDescription) || (statusCode && parseInt(statusCode) !== 200);
     const exclusionReason = shouldExclude ? 
-      (getExclusionReason(url) || `Status code: ${statusCode}`) : 
+      (getExclusionReason(url, metaDescription) || `Status code: ${statusCode}`) : 
       '';
     
     const fields = [
