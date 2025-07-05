@@ -4,9 +4,24 @@
  */
 export const SITE_SPECIFIC_EXCLUDED_PATTERNS = [
   // Forum and legacy content
-  '.html',  // Exclude old forum pages
-  '.htm',   // Exclude old forum pages
   'tags',   // Exclude tags (category in systemd)
+  'forum',  // Exclude forum links
+  
+  // Pagination
+  '/2',
+  '/3',
+  '/4',
+  '/5',
+  '/6',
+  '/7',
+  '/8',
+  '/9',
+  '/10',
+  '/11',
+  '/12',
+  '/13',
+  '/14',
+  '/15',
 ];
 
 /**
@@ -403,7 +418,7 @@ export const EXCLUDED_URL_PATTERNS = [
  */
 export const EXCLUDED_FILE_EXTENSIONS = [
   // Documents
-  '.html', '.htm', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp',
   '.rtf', '.pages', '.numbers', '.key', '.epub', '.mobi', '.azw', '.azw3',
   
   // Archives

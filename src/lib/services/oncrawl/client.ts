@@ -65,10 +65,10 @@ interface OnCrawlPage {
   word_count: string | null;
   
   // SEO & Linking metrics
-  depth: string | null;                 // Page depth (clicks from start)
-  inrank: string | null;                // Internal PageRank (0-10)
-  nb_outlinks: string | null;           // Number of internal links from this page
-  nb_inlinks: string | null;            // Number of incoming internal links
+  depth: string | null;                    // Page depth (clicks from start)
+  inrank_decimal: string | null;           // Internal PageRank as decimal
+  internal_outlinks: string | null;        // Number of internal links from this page
+  nb_inlinks: string | null;               // Number of incoming internal links
 }
 
 class OnCrawlClient {
@@ -175,12 +175,11 @@ class OnCrawlClient {
       // Technical info
       'status_code': 'status_code',
       'word_count': 'word_count',
-      'language': 'language',
       
       // SEO & Internal linking metrics
       'depth': 'depth',                           // How deep in site structure
-      'inrank': 'inrank',                         // Internal PageRank authority
-      'nb_outlinks': 'nb_outlinks',               // Links this page sends
+      'inrank_decimal': 'inrank_decimal',         // Internal PageRank as decimal
+      'internal_outlinks': 'internal_outlinks',   // Links this page sends
       'nb_inlinks': 'nb_inlinks'                  // Links this page receives
     };
     

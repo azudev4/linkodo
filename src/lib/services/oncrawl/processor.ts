@@ -13,8 +13,8 @@ export interface ProcessedOnCrawlPage {
   
   // SEO metrics for internal linking strategy
   depth: number | null;
-  inrank: number | null;
-  nbOutlinks: number | null;
+  inrankDecimal: number | null;
+  internalOutlinks: number | null;
   nbInlinks: number | null;
 }
 
@@ -40,8 +40,8 @@ export function processOnCrawlPage(page: OnCrawlPage): ProcessedOnCrawlPage {
   // Parse numeric fields (OnCrawl sends everything as strings)
   const wordCount = parseNumericField(page.word_count) || 0;
   const depth = parseNumericField(page.depth);
-  const inrank = parseNumericField(page.inrank);
-  const nbOutlinks = parseNumericField(page.nb_outlinks);
+  const inrankDecimal = parseNumericField(page.inrank_decimal);
+  const internalOutlinks = parseNumericField(page.internal_outlinks);
   const nbInlinks = parseNumericField(page.nb_inlinks);
   
   console.log('🔍 DEBUG: Processing page:', { 
@@ -50,8 +50,8 @@ export function processOnCrawlPage(page: OnCrawlPage): ProcessedOnCrawlPage {
     h1, 
     wordCount,
     depth,
-    inrank,
-    nbOutlinks,
+    inrankDecimal,
+    internalOutlinks,
     nbInlinks
   });
 
@@ -62,8 +62,8 @@ export function processOnCrawlPage(page: OnCrawlPage): ProcessedOnCrawlPage {
     h1,
     wordCount,
     depth,
-    inrank,
-    nbOutlinks,
+    inrankDecimal,
+    internalOutlinks,
     nbInlinks
   };
 }
@@ -84,8 +84,8 @@ export async function storeOnCrawlPage(page: ProcessedOnCrawlPage): Promise<void
       
       // SEO metrics for linking strategy
       depth: page.depth,
-      inrank: page.inrank,
-      internal_outlinks: page.nbOutlinks,
+      inrank_decimal: page.inrankDecimal,
+      internal_outlinks: page.internalOutlinks,
       nb_inlinks: page.nbInlinks,
       
       // Will be generated later in batch

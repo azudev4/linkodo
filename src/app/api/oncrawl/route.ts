@@ -6,10 +6,9 @@ import { shouldExcludeUrl, getExclusionReason } from '@/lib/utils/linkfilter';
 import * as XLSX from 'xlsx';
 
 function generateExcel(pages: any[]): Buffer {
-  // Create workbook and worksheet
   const workbook = XLSX.utils.book_new();
   
-  // Prepare data for Excel
+  // Prepare data for Excel with ALL available fields (CORRECTED)
   const excelData = pages.map(page => {
     const url = page.url || '';
     const title = page.title || '';
@@ -17,6 +16,12 @@ function generateExcel(pages: any[]): Buffer {
     const wordCount = page.word_count || '';
     const h1 = page.h1 || '';
     const metaDescription = page.meta_description || '';
+    
+    // SEO metrics with CORRECTED field names
+    const depth = page.depth || '';
+    const inrankDecimal = page.inrank_decimal || '';           // CORRECTED
+    const internalOutlinks = page.internal_outlinks || '';     // CORRECTED
+    const nbInlinks = page.nb_inlinks || '';
     
     // Determine if page should be excluded
     const shouldExclude = shouldExcludeUrl(url) || (statusCode && parseInt(statusCode) !== 200);
@@ -31,15 +36,21 @@ function generateExcel(pages: any[]): Buffer {
       'Word Count': wordCount,
       'H1': h1,
       'Meta Description': metaDescription,
+      
+      // SEO metrics for internal linking
+      'Depth': depth,
+      'Internal Rank (Decimal)': inrankDecimal,
+      'Internal Outlinks': internalOutlinks,
+      'Inlinks Count': nbInlinks,
+      
       'Excluded': shouldExclude ? 'YES' : 'NO',
       'Exclusion Reason': exclusionReason
     };
   });
   
-  // Create worksheet from data
   const worksheet = XLSX.utils.json_to_sheet(excelData);
   
-  // Set column widths for better readability
+  // Update column widths to include new columns
   const columnWidths = [
     { wch: 60 }, // URL
     { wch: 40 }, // Title
@@ -47,15 +58,17 @@ function generateExcel(pages: any[]): Buffer {
     { wch: 12 }, // Word Count
     { wch: 30 }, // H1
     { wch: 50 }, // Meta Description
+    { wch: 8 },  // Depth
+    { wch: 15 }, // Internal Rank (Decimal)
+    { wch: 12 }, // Internal Outlinks
+    { wch: 12 }, // Inlinks Count
     { wch: 10 }, // Excluded
     { wch: 30 }  // Exclusion Reason
   ];
   worksheet['!cols'] = columnWidths;
   
-  // Add worksheet to workbook
   XLSX.utils.book_append_sheet(workbook, worksheet, 'OnCrawl Pages');
   
-  // Generate Excel buffer
   const excelBuffer = XLSX.write(workbook, { 
     type: 'buffer', 
     bookType: 'xlsx',
@@ -66,9 +79,13 @@ function generateExcel(pages: any[]): Buffer {
 }
 
 function generateCSV(pages: any[]): string {
-  const headers = ['URL', 'Title', 'Status Code', 'Word Count', 'H1', 'Meta Description', 'Excluded', 'Exclusion Reason'];
+  const headers = [
+    'URL', 'Title', 'Status Code', 'Word Count', 'H1', 'Meta Description',
+    'Depth', 'Internal Rank (Decimal)', 'Internal Outlinks', 'Inlinks Count',
+    'Excluded', 'Exclusion Reason'
+  ];
   
-  const rows = pages.map((page, index) => {
+  const rows = pages.map((page) => {
     const url = page.url || '';
     const title = page.title || '';
     const statusCode = page.status_code || '';
@@ -76,7 +93,12 @@ function generateCSV(pages: any[]): string {
     const h1 = page.h1 || '';
     const metaDescription = page.meta_description || '';
     
-    // Determine if page should be excluded
+    // SEO metrics with CORRECTED field names
+    const depth = page.depth || '';
+    const inrankDecimal = page.inrank_decimal || '';           // CORRECTED
+    const internalOutlinks = page.internal_outlinks || '';     // CORRECTED
+    const nbInlinks = page.nb_inlinks || '';
+    
     const shouldExclude = shouldExcludeUrl(url) || (statusCode && parseInt(statusCode) !== 200);
     const exclusionReason = shouldExclude ? 
       (getExclusionReason(url) || `Status code: ${statusCode}`) : 
@@ -89,17 +111,13 @@ function generateCSV(pages: any[]): string {
       wordCount,
       h1.replace(/"/g, '""'),
       metaDescription.replace(/"/g, '""'),
+      depth,
+      inrankDecimal,
+      internalOutlinks,
+      nbInlinks,
       shouldExclude ? 'YES' : 'NO',
       exclusionReason.replace(/"/g, '""')
     ];
-    
-    // Debug problematic URLs
-    if (url.includes(',')) {
-      console.log('🔍 DEBUG: URL with comma found:', url);
-      console.log('🔍 DEBUG: Raw fields:', fields);
-      const csvRow = fields.map(field => `"${field}"`).join(',');
-      console.log('🔍 DEBUG: Generated CSV row:', csvRow);
-    }
     
     return fields.map(field => `"${field}"`).join(',');
   });
