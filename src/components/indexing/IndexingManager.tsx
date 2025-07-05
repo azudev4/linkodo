@@ -33,6 +33,7 @@ interface OnCrawlProject {
   name: string;
   url: string;
   workspace_id: string;
+  last_crawl_id?: string;
 }
 
 interface OnCrawlCrawl {
@@ -54,10 +55,8 @@ export function IndexingManager() {
   const [stats, setStats] = useState<DatabaseStats | null>(null);
   const [workspaces, setWorkspaces] = useState<OnCrawlWorkspace[]>([]);
   const [projects, setProjects] = useState<OnCrawlProject[]>([]);
-  const [crawls, setCrawls] = useState<OnCrawlCrawl[]>([]);
   const [selectedWorkspace, setSelectedWorkspace] = useState<string>('');
   const [selectedProject, setSelectedProject] = useState<string>('');
-  const [selectedCrawl, setSelectedCrawl] = useState<string>('');
   
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -73,13 +72,6 @@ export function IndexingManager() {
     loadStats();
     loadProjects();
   }, []);
-
-  // Load crawls when project changes
-  useEffect(() => {
-    if (selectedProject) {
-      loadCrawls(selectedProject);
-    }
-  }, [selectedProject]);
 
   const clearMessages = () => {
     setError(null);
@@ -117,26 +109,16 @@ export function IndexingManager() {
     }
   };
 
-  const loadCrawls = async (projectId: string) => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(`/api/indexing?action=crawls&projectId=${projectId}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setCrawls(data.crawls);
-      } else {
-        setError('Failed to load crawls');
-      }
-    } catch (err) {
-      setError('Error loading crawls');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleSync = async () => {
-    if (!selectedCrawl) return;
+    if (!selectedProject) return;
+    
+    const project = projects.find(p => p.id === selectedProject);
+    const latestCrawlId = project?.last_crawl_id;
+    
+    if (!latestCrawlId) {
+      setError('No crawls found for this project');
+      return;
+    }
     
     setIsSyncing(true);
     clearMessages();
@@ -148,7 +130,7 @@ export function IndexingManager() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'sync',
-          crawlId: selectedCrawl
+          crawlId: latestCrawlId
         })
       });
       
@@ -363,56 +345,19 @@ export function IndexingManager() {
 
         <CardContent className="space-y-6">
           {/* Project Selection */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">OnCrawl Project</label>
-              <Select value={selectedProject} onValueChange={setSelectedProject} disabled={isLoading}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a project..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.map((project) => (
-                    <SelectItem key={project.id} value={project.id}>
-                      <div className="flex items-center justify-between w-full">
-                        <span>{project.name}</span>
-                        <Badge variant="outline" className="ml-2 text-xs">
-                          {project.url}
-                        </Badge>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Crawl Selection */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Crawl</label>
-              <Select 
-                value={selectedCrawl} 
-                onValueChange={setSelectedCrawl} 
-                disabled={isLoading || !selectedProject}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a crawl..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {crawls.map((crawl) => (
-                    <SelectItem key={crawl.id} value={crawl.id}>
-                      <div className="flex items-center justify-between w-full">
-                        <span>{crawl.name}</span>
-                        <Badge 
-                          variant={crawl.status === 'completed' ? 'default' : 'secondary'}
-                          className="ml-2 text-xs"
-                        >
-                          {crawl.status}
-                        </Badge>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2">
+            <Select value={selectedProject} onValueChange={setSelectedProject} disabled={isLoading}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a project to sync" />
+              </SelectTrigger>
+              <SelectContent className="max-h-[300px]">
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Sync Progress */}
@@ -433,7 +378,7 @@ export function IndexingManager() {
           {/* Sync Button */}
           <Button
             onClick={handleSync}
-            disabled={!selectedCrawl || isSyncing || isLoading}
+            disabled={!selectedProject || isSyncing || isLoading}
             className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
             size="lg"
           >

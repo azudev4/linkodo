@@ -3,6 +3,7 @@ interface OnCrawlProject {
   id: string;
   name: string;
   url: string;
+  workspace_id: string;
 }
 
 interface OnCrawlCrawl {
@@ -56,12 +57,8 @@ class OnCrawlClient {
 
   async getProjects(): Promise<OnCrawlProject[]> {
     const response = await this.request<{ projects: OnCrawlProject[] }>('/projects');
+    console.log('OnCrawl projects response:', JSON.stringify(response, null, 2));
     return response.projects;
-  }
-
-  async getCrawls(projectId: string): Promise<OnCrawlCrawl[]> {
-    const response = await this.request<{ crawls: OnCrawlCrawl[] }>(`/projects/${projectId}/crawls`);
-    return response.crawls;
   }
 
   async getAvailableFields(crawlId: string): Promise<string[]> {

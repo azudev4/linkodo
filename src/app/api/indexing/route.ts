@@ -61,19 +61,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, projects });
     }
     
-    if (action === 'crawls') {
-      const workspaceId = searchParams.get('workspaceId');
-      if (!workspaceId) {
-        return NextResponse.json(
-          { error: 'workspaceId required' },
-          { status: 400 }
-        );
-      }
-      
-      const crawls = await client.getCrawls(workspaceId);
-      return NextResponse.json({ success: true, crawls });
-    }
-    
     return NextResponse.json(
       { error: 'Invalid action' },
       { status: 400 }
