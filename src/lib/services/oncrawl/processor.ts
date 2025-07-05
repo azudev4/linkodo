@@ -1,6 +1,5 @@
 // src/lib/services/oncrawl/processor.ts
 import { OnCrawlPage, OnCrawlClient } from './client';
-import { generateEmbedding } from '../embeding/embeddings';
 import { supabase } from '@/lib/db/client';
 
 export interface ProcessedOnCrawlPage {
@@ -80,7 +79,7 @@ export function processOnCrawlPage(page: OnCrawlPage): ProcessedOnCrawlPage {
   return {
     url: page.url,
     title: page.title,
-    metaDescription: page.description,
+    metaDescription: page.meta_description,
     h1: page.h1,
     h2Tags,
     h3Tags,

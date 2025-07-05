@@ -350,7 +350,7 @@ export function IndexingManager() {
               <SelectTrigger>
                 <SelectValue placeholder="Select a project to sync" />
               </SelectTrigger>
-              <SelectContent className="max-h-[300px]">
+              <SelectContent position="popper" className="max-h-[300px]">
                 {projects.map((project) => (
                   <SelectItem key={project.id} value={project.id}>
                     {project.name}
