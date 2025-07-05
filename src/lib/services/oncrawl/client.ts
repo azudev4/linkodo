@@ -1,9 +1,45 @@
 // src/lib/services/oncrawl/client.ts
+
+/**
+ * Properly parses a CSV line respecting quoted fields
+ */
+function parseCSVLine(line: string, delimiter: string = ';'): (string | null)[] {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++; // Skip next quote
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === delimiter && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  
+  result.push(current.trim());
+  return result.map(value => {
+    // Clean up quotes and whitespace
+    const cleaned = value.replace(/^"(.*)"$/, '$1').trim();
+    return cleaned === '' ? null : cleaned;
+  });
+}
+
 interface OnCrawlProject {
   id: string;
   name: string;
   url: string;
   workspace_id: string;
+  last_crawl_id?: string;
 }
 
 interface OnCrawlCrawl {
@@ -13,6 +49,7 @@ interface OnCrawlCrawl {
   status: string;
   created_at: string;
   url: string;
+  state?: string;
 }
 
 interface OnCrawlPage {
@@ -39,76 +76,39 @@ class OnCrawlClient {
   }
 
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-    const requestOptions = {
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
       headers: {
         'Authorization': `Bearer ${this.token}`,
         'Content-Type': 'application/json',
         ...options?.headers,
       },
       ...options,
-    };
-
-    console.log('OnCrawl API request:', {
-      url: `${this.baseUrl}${endpoint}`,
-      method: options?.method || 'GET',
-      headers: requestOptions.headers,
-      body: options?.body ? JSON.parse(options.body as string) : undefined
     });
-
-    const response = await fetch(`${this.baseUrl}${endpoint}`, requestOptions);
 
     if (!response.ok) {
       const errorBody = await response.text();
-      console.error('OnCrawl API error response:', {
-        status: response.status,
-        statusText: response.statusText,
-        body: errorBody
-      });
       throw new Error(`OnCrawl API error: ${response.status} ${response.statusText} - ${errorBody}`);
     }
 
-    // Handle export responses differently (they return raw data)
+    // Handle export responses (CSV format)
     if (endpoint.includes('export=true')) {
       const rawData = await response.text();
-      console.log('OnCrawl export response (first 500 chars):', rawData.substring(0, 500));
-      console.log('OnCrawl export response length:', rawData.length);
-      
-      // OnCrawl export always returns CSV data (semicolon-delimited)
       const lines = rawData.trim().split('\n').filter(line => line.trim());
-      console.log('Number of lines in response:', lines.length);
       
-      if (lines.length === 0) {
-        return [] as T;
-      }
+      if (lines.length === 0) return [] as T;
       
-      // Parse CSV header
-      const headerLine = lines[0];
-      const headers = headerLine.split(';').map(h => h.replace(/"/g, '').trim());
-      console.log('CSV headers:', headers);
-      
-      // Parse CSV data lines
-      const jsonObjects = lines.slice(1).map((line, index) => {
-        try {
-          const values = line.split(';').map(v => {
-            // Remove quotes and handle empty values
-            const cleaned = v.replace(/"/g, '').trim();
-            return cleaned === '' ? null : cleaned;
-          });
-          
-          // Create object from headers and values
-          const obj: any = {};
-          headers.forEach((header, i) => {
+      const headers = parseCSVLine(lines[0]);
+      const jsonObjects = lines.slice(1).map(line => {
+        const values = parseCSVLine(line);
+        const obj: any = {};
+        headers.forEach((header, i) => {
+          if (header !== null) {
             obj[header] = values[i];
-          });
-          
-          return obj;
-        } catch (parseError) {
-          console.error(`Failed to parse CSV line ${index + 1}:`, line.substring(0, 100));
-          throw parseError;
-        }
+          }
+        });
+        return obj;
       });
       
-      console.log('Parsed', jsonObjects.length, 'objects from CSV');
       return jsonObjects as T;
     }
 
@@ -117,51 +117,44 @@ class OnCrawlClient {
 
   async getProjects(): Promise<OnCrawlProject[]> {
     const response = await this.request<{ projects: OnCrawlProject[] }>('/projects');
-    console.log('OnCrawl projects response:', JSON.stringify(response, null, 2));
     return response.projects;
   }
 
-  async getAvailableFields(crawlId: string): Promise<string[]> {
-    const response = await this.request<{ fields: Array<{ name: string }> }>(`/data/crawl/${crawlId}/pages/fields`);
-    return response.fields.map(field => field.name);
+  async getCrawls(projectId: string): Promise<OnCrawlCrawl[]> {
+    const response = await this.request<{ crawls: OnCrawlCrawl[] }>(`/projects/${projectId}/crawls`);
+    return response.crawls;
   }
 
-  async getPages(crawlId: string, fields: string[] = [], limit: number = 1000, offset: number = 0): Promise<OnCrawlPage[]> {
-    const defaultFields = [
-      'url', 'title', 'h1', 'h2', 'h3', 'meta_description',
-      'status_code', 'inrank', 'nb_inlinks', 'content', 'word_count'
-    ];
-    
-    const requestFields = fields.length > 0 ? fields : defaultFields;
-    
-    const response = await this.request<{ urls: OnCrawlPage[] }>(`/data/crawl/${crawlId}/pages`, {
-      method: 'POST',
-      body: JSON.stringify({
-        fields: requestFields,
-        limit: Math.min(limit, 1000), // Ensure we don't exceed API limit
-        offset
-      }),
-    });
-
-    return response.urls || [];
+  async isCrawlAccessible(crawlId: string): Promise<boolean> {
+    try {
+      await this.request<{ fields: Array<{ name: string }> }>(`/data/crawl/${crawlId}/pages/fields`);
+      return true;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('must be live')) {
+        return false;
+      }
+      throw error;
+    }
   }
 
   async getAllPages(crawlId: string): Promise<OnCrawlPage[]> {
-    // Use OnCrawl's Export API to bypass the 10k limit
-    console.log('Using OnCrawl Export API to fetch all pages (no 10k limit)');
+    const isAccessible = await this.isCrawlAccessible(crawlId);
+    if (!isAccessible) {
+      throw new Error(`Crawl ${crawlId} is not accessible. The crawl must be in a 'live' state to access its data.`);
+    }
+
+    // Get available fields
+    const fieldsResponse = await this.request<{ fields: Array<{ name: string }> }>(`/data/crawl/${crawlId}/pages/fields`);
+    const availableFields = fieldsResponse.fields.map(field => field.name);
     
-    // Get available fields first
-    const availableFields = await this.getAvailableFields(crawlId);
     const desiredFields = [
       'url', 'title', 'h1', 'h2', 'h3', 
       'status_code', 'inrank', 'nb_inlinks', 'content', 'word_count'
     ];
     
-    // Use only fields that are actually available
     const validFields = desiredFields.filter(field => availableFields.includes(field));
     
-    // OnCrawl export returns JSONL (JSON Lines) format
-    const jsonlData = await this.request<OnCrawlPage[]>(`/data/crawl/${crawlId}/pages?export=true`, {
+    const pages = await this.request<OnCrawlPage[]>(`/data/crawl/${crawlId}/pages?export=true`, {
       method: 'POST',
       body: JSON.stringify({
         fields: validFields,
@@ -169,32 +162,7 @@ class OnCrawlClient {
       }),
     });
 
-    console.log(`Successfully exported ${jsonlData.length} pages from OnCrawl (no limit)`);
-    return jsonlData;
-  }
-
-  async exportAllPagesAsCSV(crawlId: string): Promise<string> {
-    // Alternative method to get CSV export URL
-    const availableFields = await this.getAvailableFields(crawlId);
-    const desiredFields = [
-      'url', 'title', 'h1', 'h2', 'h3', 
-      'status_code', 'inrank', 'nb_inlinks', 'content', 'word_count'
-    ];
-    
-    const validFields = desiredFields.filter(field => availableFields.includes(field));
-    
-    // This returns a CSV string directly
-    const csvData = await this.request<string>(`/data/crawl/${crawlId}/pages?export=true&file_type=csv`, {
-      method: 'POST',
-      body: JSON.stringify({
-        fields: validFields,
-        oql: {
-          field: ["fetched", "equals", true]
-        }
-      }),
-    });
-
-    return csvData;
+    return pages;
   }
 }
 

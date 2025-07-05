@@ -1,4 +1,21 @@
 /**
+ * Site-specific patterns to exclude from indexing
+ * Specific to Rustica/SystemD content
+ */
+export const SITE_SPECIFIC_EXCLUDED_PATTERNS = [
+  // Forum and legacy content
+  '.html',  // Exclude old forum pages
+  '.htm',   // Exclude old forum pages
+];
+
+/**
+ * =========================================
+ * GENERAL EXCLUSION PATTERNS
+ * Standard patterns for excluding non-content pages
+ * =========================================
+ */
+
+/**
  * URL patterns to exclude from indexing (SEO irrelevant pages)
  */
 export const EXCLUDED_URL_PATTERNS = [
@@ -11,12 +28,6 @@ export const EXCLUDED_URL_PATTERNS = [
   '/disclaimer',
   '/cookies',
   '/gdpr',
-  '/mentions-legales',
-  '/politique-confidentialite',
-  '/conditions-generales',
-  '/terms-of-service',
-  '/terms-of-use',
-  '/acceptable-use',
   '/copyright',
   '/dmca',
   '/refund',
@@ -30,24 +41,12 @@ export const EXCLUDED_URL_PATTERNS = [
   '/support',
   '/help',
   '/faq',
-  '/aide',
-  '/assistance',
-  '/customer-service',
-  '/customer-support',
-  '/helpdesk',
   '/ticket',
   '/feedback',
-  '/suggestion',
   '/complaint',
   '/report',
   '/abuse',
   '/contact-us',
-  '/get-in-touch',
-  '/reach-out',
-  '/nous-contacter',
-  '/service-client',
-  '/signaler',
-  '/plainte',
   
   // Admin/Technical pages
   '/admin',
@@ -63,8 +62,6 @@ export const EXCLUDED_URL_PATTERNS = [
   '/preferences',
   '/config',
   '/setup',
-  '/installation',
-  '/maintenance',
   '/test',
   '/debug',
   '/dev',
@@ -88,44 +85,24 @@ export const EXCLUDED_URL_PATTERNS = [
   '/member',
   '/members',
   '/my-account',
-  '/mon-compte',
-  '/profil',
-  '/parametres',
-  '/configuration',
-  '/connexion',
-  '/deconnexion',
-  '/inscription',
-  '/enregistrement',
   
   // Search/Filter pages
   '/search',
   '/filter',
   '/sort',
-  '/recherche',
-  '/rechercher',
-  '/filtrer',
-  '/trier',
   '/results',
-  '/resultat',
-  '/resultats',
   '/find',
   '/lookup',
   '/query',
   '/browse',
   '/explore',
-  '/parcourir',
-  '/explorer',
   '/advanced-search',
-  '/recherche-avancee',
   
   // Cart/Checkout pages
   '/cart',
   '/checkout',
   '/payment',
   '/order',
-  '/panier',
-  '/commande',
-  '/paiement',
   '/basket',
   '/bag',
   '/purchase',
@@ -147,17 +124,6 @@ export const EXCLUDED_URL_PATTERNS = [
   '/shipped',
   '/delivered',
   '/tracking',
-  '/order-status',
-  '/commande-statut',
-  '/suivi',
-  '/livraison',
-  '/facturation',
-  '/facture',
-  '/recu',
-  '/merci',
-  '/confirmation',
-  '/achat',
-  '/acheter',
   
   // File/Download pages
   '/download',
@@ -165,8 +131,6 @@ export const EXCLUDED_URL_PATTERNS = [
   '/pdf',
   '/doc',
   '/zip',
-  '/telecharger',
-  '/fichier',
   '/attachment',
   '/attachments',
   '/uploads',
@@ -182,13 +146,6 @@ export const EXCLUDED_URL_PATTERNS = [
   '/export',
   '/backup',
   '/dump',
-  '/archive-file',
-  '/telechargement',
-  '/piece-jointe',
-  '/ressources',
-  '/medias',
-  '/exporter',
-  '/sauvegarder',
   
   // Archive/Date pages
   '/archive',
@@ -201,12 +158,6 @@ export const EXCLUDED_URL_PATTERNS = [
   '/page/',
   '/p/',
   '/archives',
-  '/categorie',
-  '/auteur',
-  '/etiquette',
-  '/tags',
-  '/categories',
-  '/authors',
   '/topics',
   '/subjects',
   '/themes',
@@ -228,15 +179,6 @@ export const EXCLUDED_URL_PATTERNS = [
   '/sidebar',
   '/widget',
   '/widgets',
-  '/dossier',
-  '/dossiers',
-  '/repertoire',
-  '/repertoires',
-  '/classement',
-  '/sujets',
-  '/themes',
-  '/rubriques',
-  '/sections',
   
   // API/Technical endpoints
   '/api',
@@ -284,22 +226,11 @@ export const EXCLUDED_URL_PATTERNS = [
   '/ping-test',
   '/load-test',
   '/stress-test',
-  '/flux',
-  '/fil',
-  '/syndication',
-  '/statistiques',
-  '/metriques',
-  '/surveillance',
-  '/performance',
-  '/vitesse',
   
   // Social/Share pages
   '/share',
   '/print',
   '/email',
-  '/partager',
-  '/imprimer',
-  '/envoyer',
   '/social',
   '/facebook',
   '/twitter',
@@ -331,21 +262,6 @@ export const EXCLUDED_URL_PATTERNS = [
   '/wishlist',
   '/save',
   '/saved',
-  '/aimer',
-  '/suivre',
-  '/abonner',
-  '/desabonner',
-  '/lettre-information',
-  '/alerte',
-  '/alertes',
-  '/rappel',
-  '/rappels',
-  '/marque-page',
-  '/favori',
-  '/favoris',
-  '/liste-souhaits',
-  '/sauvegarder',
-  '/sauvegarde',
   
   // Temporary/Redirect pages
   '/redirect',
@@ -383,27 +299,13 @@ export const EXCLUDED_URL_PATTERNS = [
   '/removed',
   '/deleted',
   '/redirection',
-  '/sortie',
-  '/externe',
-  '/temporaire',
-  '/quitter',
-  '/partir',
-  '/transfert',
-  '/cache',
-  '/sauvegarde',
-  '/ancien',
-  '/ancienne',
-  '/obsolete',
-  '/supprime',
   
   // Error pages
   '/404',
   '/500',
   '/error',
-  '/erreur',
   '/not-found',
   '/unavailable',
-  '/maintenance',
   '/403',
   '/401',
   '/400',
@@ -429,29 +331,8 @@ export const EXCLUDED_URL_PATTERNS = [
   '/offline',
   '/down',
   '/outage',
-  '/incident',
-  '/problem',
   '/issue',
   '/trouble',
-  '/interdit',
-  '/non-autorise',
-  '/mauvaise-requete',
-  '/delai-expire',
-  '/erreur-serveur',
-  '/erreur-client',
-  '/page-introuvable',
-  '/fichier-introuvable',
-  '/acces-refuse',
-  '/permission-refusee',
-  '/bloque',
-  '/banni',
-  '/suspendu',
-  '/desactive',
-  '/hors-ligne',
-  '/panne',
-  '/incident',
-  '/probleme',
-  '/difficulte',
   
   // Preview/Draft pages
   '/preview',
@@ -461,9 +342,6 @@ export const EXCLUDED_URL_PATTERNS = [
   '/demo',
   '/sample',
   '/example',
-  '/apercu',
-  '/brouillon',
-  '/exemple',
   '/prototype',
   '/mockup',
   '/wireframe',
@@ -497,26 +375,6 @@ export const EXCLUDED_URL_PATTERNS = [
   '/html-test',
   '/php-test',
   '/sql-test',
-  '/prototypage',
-  '/maquette',
-  '/esquisse',
-  '/croquis',
-  '/idee',
-  '/proposition',
-  '/ebauche',
-  '/travail-en-cours',
-  '/bientot-disponible',
-  '/en-construction',
-  '/espace-reserve',
-  '/factice',
-  '/faux',
-  '/remplissage',
-  '/modele',
-  '/squelette',
-  '/cadre',
-  '/mise-en-page',
-  '/conception',
-  '/style',
   
   // Pagination/Navigation
   '/page-',
@@ -536,98 +394,7 @@ export const EXCLUDED_URL_PATTERNS = [
   '/view-all',
   '/see-all',
   '/all',
-  '/suivant',
-  '/precedent',
-  '/premier',
-  '/dernier',
-  '/plus',
-  '/charger-plus',
-  '/afficher-plus',
-  '/voir-tout',
-  '/tout-voir',
-  '/tous',
   
-  // Language/Locale pages
-  '/en/',
-  '/fr/',
-  '/es/',
-  '/de/',
-  '/it/',
-  '/pt/',
-  '/ru/',
-  '/zh/',
-  '/ja/',
-  '/ko/',
-  '/ar/',
-  '/hi/',
-  '/lang/',
-  '/language/',
-  '/locale/',
-  '/region/',
-  '/country/',
-  '/langue/',
-  '/region/',
-  '/pays/',
-  
-  // Mobile/Device specific
-  '/mobile',
-  '/m/',
-  '/amp',
-  '/accelerated',
-  '/instant',
-  '/lite',
-  '/light',
-  '/fast',
-  '/speed',
-  '/quick',
-  '/rapid',
-  '/turbo',
-  '/boost',
-  '/optimized',
-  '/compressed',
-  '/minified',
-  '/reduced',
-  '/simplified',
-  '/basic',
-  '/minimal',
-  '/clean',
-  '/plain',
-  '/text',
-  '/no-js',
-  '/no-css',
-  '/no-images',
-  '/low-bandwidth',
-  '/dialup',
-  '/slow',
-  '/offline',
-  '/cache-only',
-  '/static',
-  '/cdn',
-  '/edge',
-  '/proxy',
-  '/mirror',
-  '/backup-site',
-  '/fallback',
-  '/alternative',
-  '/alt',
-  '/leger',
-  '/rapide',
-  '/optimise',
-  '/compresse',
-  '/reduit',
-  '/simplifie',
-  '/basique',
-  '/minimal',
-  '/propre',
-  '/texte',
-  '/sans-js',
-  '/sans-css',
-  '/sans-images',
-  '/faible-debit',
-  '/lent',
-  '/hors-ligne',
-  '/statique',
-  '/alternatif',
 ];
 
 /**
@@ -635,7 +402,7 @@ export const EXCLUDED_URL_PATTERNS = [
  */
 export const EXCLUDED_FILE_EXTENSIONS = [
   // Documents
-  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp',
+  '.html', '.htm', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp',
   '.rtf', '.pages', '.numbers', '.key', '.epub', '.mobi', '.azw', '.azw3',
   
   // Archives
@@ -744,46 +511,20 @@ export function shouldExcludeUrl(url: string): boolean {
     const urlObj = new URL(url);
     const pathname = urlObj.pathname.toLowerCase();
     const search = urlObj.search.toLowerCase();
-    
-    // Check for excluded URL patterns
-    for (const pattern of EXCLUDED_URL_PATTERNS) {
-      if (pathname.includes(pattern)) {
-        return true;
-      }
-    }
-    
-    // Check for excluded file extensions
-    for (const ext of EXCLUDED_FILE_EXTENSIONS) {
-      if (pathname.endsWith(ext)) {
-        return true;
-      }
-    }
-    
-    // Check for excluded query parameters
-    for (const param of EXCLUDED_QUERY_PARAMS) {
-      if (search.includes(param + '=')) {
-        return true;
-      }
-    }
-    
-    // Exclude URLs with too many path segments (likely filters/pagination)
     const pathSegments = pathname.split('/').filter(Boolean);
-    if (pathSegments.length > 6) {
-      return true;
-    }
     
-    // Exclude URLs with numbers that look like IDs in the path
-    const hasNumericSegments = pathSegments.some(segment => 
-      /^\d+$/.test(segment) && segment.length > 6
-    );
-    if (hasNumericSegments) {
-      return true;
-    }
+    // Check all exclusion patterns
+    if (SITE_SPECIFIC_EXCLUDED_PATTERNS.some(pattern => pathname.includes(pattern))) return true;
+    if (EXCLUDED_URL_PATTERNS.some(pattern => pathSegments.includes(pattern.split('/').filter(Boolean)[0]))) return true;
+    if (EXCLUDED_FILE_EXTENSIONS.some(ext => pathname.endsWith(ext))) return true;
+    if (EXCLUDED_QUERY_PARAMS.some(param => search.includes(param + '='))) return true;
+    
+    // Path-based rules
+    if (pathSegments.length > 6) return true;
+    if (pathSegments.some(segment => /^\d+$/.test(segment) && segment.length > 6)) return true;
     
     return false;
-    
   } catch (error) {
-    // Invalid URL, exclude it
     return true;
   }
 }
@@ -805,44 +546,28 @@ export function getExclusionReason(url: string): string | null {
     const urlObj = new URL(url);
     const pathname = urlObj.pathname.toLowerCase();
     const search = urlObj.search.toLowerCase();
-    
-    // Check patterns
-    for (const pattern of EXCLUDED_URL_PATTERNS) {
-      if (pathname.includes(pattern)) {
-        return `Contains excluded pattern: ${pattern}`;
-      }
-    }
-    
-    // Check extensions
-    for (const ext of EXCLUDED_FILE_EXTENSIONS) {
-      if (pathname.endsWith(ext)) {
-        return `Has excluded extension: ${ext}`;
-      }
-    }
-    
-    // Check query params
-    for (const param of EXCLUDED_QUERY_PARAMS) {
-      if (search.includes(param + '=')) {
-        return `Contains excluded parameter: ${param}`;
-      }
-    }
-    
-    // Check path segments
     const pathSegments = pathname.split('/').filter(Boolean);
-    if (pathSegments.length > 6) {
-      return `Too many path segments: ${pathSegments.length}`;
-    }
     
-    // Check numeric segments
-    const numericSegment = pathSegments.find(segment => 
-      /^\d+$/.test(segment) && segment.length > 6
+    const sitePattern = SITE_SPECIFIC_EXCLUDED_PATTERNS.find(pattern => pathname.includes(pattern));
+    if (sitePattern) return `Site-specific exclusion: ${sitePattern}`;
+    
+    const urlPattern = EXCLUDED_URL_PATTERNS.find(pattern => 
+      pathSegments.includes(pattern.split('/').filter(Boolean)[0])
     );
-    if (numericSegment) {
-      return `Contains long numeric ID: ${numericSegment}`;
-    }
+    if (urlPattern) return `Excluded pattern: ${urlPattern}`;
+    
+    const fileExt = EXCLUDED_FILE_EXTENSIONS.find(ext => pathname.endsWith(ext));
+    if (fileExt) return `Excluded extension: ${fileExt}`;
+    
+    const queryParam = EXCLUDED_QUERY_PARAMS.find(param => search.includes(param + '='));
+    if (queryParam) return `Excluded query param: ${queryParam}`;
+    
+    if (pathSegments.length > 6) return `Too many path segments: ${pathSegments.length}`;
+    
+    const numericSegment = pathSegments.find(segment => /^\d+$/.test(segment) && segment.length > 6);
+    if (numericSegment) return `Long numeric ID: ${numericSegment}`;
     
     return null;
-    
   } catch (error) {
     return 'Invalid URL format';
   }

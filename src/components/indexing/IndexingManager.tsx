@@ -80,7 +80,7 @@ export function IndexingManager() {
 
   const loadStats = async () => {
     try {
-      const response = await fetch('/api/indexing?action=stats');
+      const response = await fetch('/api/stats');
       const data = await response.json();
       
       if (data.success) {
@@ -94,7 +94,7 @@ export function IndexingManager() {
   const loadProjects = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/indexing?action=projects');
+      const response = await fetch('/api/oncrawl?action=projects');
       const data = await response.json();
       
       if (data.success) {
@@ -125,13 +125,10 @@ export function IndexingManager() {
     setSyncProgress(0);
     
     try {
-      const response = await fetch('/api/indexing', {
+      const response = await fetch('/api/oncrawl', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'sync',
-          crawlId: latestCrawlId
-        })
+        body: JSON.stringify({ crawlId: latestCrawlId })
       });
       
       const data = await response.json();
@@ -162,7 +159,7 @@ export function IndexingManager() {
     }
     
     try {
-      const response = await fetch(`/api/indexing?action=download-csv&crawlId=${latestCrawlId}`);
+      const response = await fetch(`/api/oncrawl?action=download&crawlId=${latestCrawlId}`);
       
       if (response.ok) {
         const blob = await response.blob();
@@ -190,12 +187,9 @@ export function IndexingManager() {
     setEmbeddingProgress(0);
     
     try {
-      const response = await fetch('/api/indexing', {
+      const response = await fetch('/api/embeddings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'generate-embeddings'
-        })
+        headers: { 'Content-Type': 'application/json' }
       });
       
       const data = await response.json();
