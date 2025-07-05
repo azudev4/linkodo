@@ -53,6 +53,7 @@ export type Database = {
       }
       pages: {
         Row: {
+          content_snippet: string | null
           created_at: string | null
           embedding: string | null
           h1: string | null
@@ -69,6 +70,7 @@ export type Database = {
           word_count: number | null
         }
         Insert: {
+          content_snippet?: string | null
           created_at?: string | null
           embedding?: string | null
           h1?: string | null
@@ -85,6 +87,7 @@ export type Database = {
           word_count?: number | null
         }
         Update: {
+          content_snippet?: string | null
           created_at?: string | null
           embedding?: string | null
           h1?: string | null
@@ -125,6 +128,7 @@ export type Database = {
           h1: string
           h2_tags: string[]
           h3_tags: string[]
+          h4_tags: string[]
           primary_keywords: string[]
           similarity: number
         }[]
