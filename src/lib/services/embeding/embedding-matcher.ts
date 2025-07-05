@@ -2,8 +2,6 @@ import OpenAI from 'openai';
 import { findSimilarPages, SimilarPage, supabase } from '@/lib/db/client';
 import { AnchorCandidate } from '../text-processor';
 import { PageData } from '@/lib/db/client';
-import { generateEmbedding } from './embeddings';
-
 // Initialize OpenAI
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
