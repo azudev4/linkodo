@@ -1,7 +1,7 @@
-// src/lib/services/oncrawl/processor.ts
+// src/lib/services/oncrawl/processor.ts - Corrected version
+
 import { OnCrawlPage, OnCrawlClient } from './client';
 import { supabase } from '@/lib/db/client';
-import { filterStopWords } from '@/lib/utils/stopwords';
 import { shouldExcludeUrl, getExclusionReason } from '@/lib/utils/linkfilter';
 
 export interface ProcessedOnCrawlPage {
@@ -9,94 +9,68 @@ export interface ProcessedOnCrawlPage {
   title: string | null;
   metaDescription: string | null;
   h1: string | null;
-  h2Tags: string[];
-  h3Tags: string[];
-  primaryKeywords: string[];
   wordCount: number;
-  contentSnippet: string | null;
+  
+  // SEO metrics for internal linking strategy
+  depth: number | null;
+  inrank: number | null;
+  nbOutlinks: number | null;
+  nbInlinks: number | null;
 }
 
 /**
- * Extract keywords from page content
+ * Convert string values to numbers (OnCrawl returns everything as strings)
  */
-function extractKeywords(content: string | null, title: string | null, h1: string | null): string[] {
-  if (!content && !title && !h1) return [];
-  
-  const textToAnalyze = [title, h1, content].filter(Boolean).join(' ');
-  
-  const words = textToAnalyze
-    .toLowerCase()
-    .replace(/[^\w\sàâäéèêëïîôùûüÿç]/gi, ' ')
-    .split(/\s+/)
-    .filter(word => word.length > 3);
-
-  // Use the new stop words utility
-  const filteredWords = filterStopWords(words);
-
-  const wordFreq = filteredWords.reduce((acc, word) => {
-    acc[word] = (acc[word] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  return Object.entries(wordFreq)
-    .sort(([,a], [,b]) => b - a)
-    .slice(0, 15)
-    .map(([word]) => word);
-}
-
-/**
- * Extract content snippet from title and meta description
- */
-function extractContentSnippet(title: string | null, metaDescription: string | null): string | null {
-  const content = [title, metaDescription].filter(Boolean).join(' - ');
-  
-  if (!content) return null;
-  
-  const cleaned = content
-    .replace(/[*_`]/g, '')
-    .replace(/\n+/g, ' ')
-    .trim();
-  
-  if (cleaned.length <= 200) return cleaned;
-  
-  const truncated = cleaned.substring(0, 200);
-  const lastSpace = truncated.lastIndexOf(' ');
-  return (lastSpace > 150 ? truncated.substring(0, lastSpace) : truncated) + '...';
+function parseNumericField(value: string | null | undefined): number | null {
+  if (!value || value === 'null' || value === '') return null;
+  const parsed = parseInt(value, 10);
+  return isNaN(parsed) ? null : parsed;
 }
 
 /**
  * Process OnCrawl page data to our standard format
+ * Pure data transformation - no content generation
  */
 export function processOnCrawlPage(page: OnCrawlPage): ProcessedOnCrawlPage {
-  // Map OnCrawl API fields to our internal structure
   const url = page.url;
   const title = page.title;
   const h1 = page.h1;
   const metaDescription = page.meta_description;
-  const statusCode = page.status_code ? parseInt(page.status_code) : null;
-  const wordCount = page.word_count ? parseInt(page.word_count) : 0;
+
+  // Parse numeric fields (OnCrawl sends everything as strings)
+  const wordCount = parseNumericField(page.word_count) || 0;
+  const depth = parseNumericField(page.depth);
+  const inrank = parseNumericField(page.inrank);
+  const nbOutlinks = parseNumericField(page.nb_outlinks);
+  const nbInlinks = parseNumericField(page.nb_inlinks);
   
-  console.log('🔍 DEBUG: Processing page:', { url, title, h1, statusCode, wordCount });
-  
-  // Since OnCrawl API doesn't have h2/h3 tags, we'll extract keywords from available content
-  const primaryKeywords = extractKeywords(null, title, h1);
-  const contentSnippet = extractContentSnippet(title, metaDescription);
+  console.log('🔍 DEBUG: Processing page:', { 
+    url, 
+    title, 
+    h1, 
+    wordCount,
+    depth,
+    inrank,
+    nbOutlinks,
+    nbInlinks
+  });
 
   return {
     url,
     title,
     metaDescription,
     h1,
-    h2Tags: [], // Not available in OnCrawl API response
-    h3Tags: [], // Not available in OnCrawl API response
-    primaryKeywords,
     wordCount,
-    contentSnippet
+    depth,
+    inrank,
+    nbOutlinks,
+    nbInlinks
   };
 }
 
 /**
  * Store processed page in database
+ * Only store what we actually have from OnCrawl
  */
 export async function storeOnCrawlPage(page: ProcessedOnCrawlPage): Promise<void> {
   const { error } = await supabase
@@ -106,12 +80,16 @@ export async function storeOnCrawlPage(page: ProcessedOnCrawlPage): Promise<void
       title: page.title,
       meta_description: page.metaDescription,
       h1: page.h1,
-      h2_tags: page.h2Tags,
-      h3_tags: page.h3Tags,
-      primary_keywords: page.primaryKeywords,
       word_count: page.wordCount,
-      content_snippet: page.contentSnippet,
-      embedding: null, // Generated later in batch
+      
+      // SEO metrics for linking strategy
+      depth: page.depth,
+      inrank: page.inrank,
+      internal_outlinks: page.nbOutlinks,
+      nb_inlinks: page.nbInlinks,
+      
+      // Will be generated later in batch
+      embedding: null,
       last_crawled: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }, {
@@ -124,7 +102,8 @@ export async function storeOnCrawlPage(page: ProcessedOnCrawlPage): Promise<void
 }
 
 /**
- * Sync all pages from OnCrawl crawl to database
+ * Main sync function - orchestrates the full process
+ * This is why we have a processor: business logic coordination
  */
 export async function syncPagesFromOnCrawl(
   crawlId: string, 
@@ -134,11 +113,11 @@ export async function syncPagesFromOnCrawl(
   
   console.log(`Starting sync from OnCrawl crawl: ${crawlId}`);
   
-  // Get all pages from OnCrawl
+  // 1. Fetch raw data from OnCrawl (client responsibility)
   const pages = await client.getAllPages(crawlId);
   console.log(`Found ${pages.length} pages in OnCrawl crawl`);
   
-  // Filter out pages that shouldn't be indexed
+  // 2. Apply business rules - filter excludable pages (processor responsibility)
   const indexablePages = pages.filter(page => {
     const url = page.url;
     
@@ -147,7 +126,7 @@ export async function syncPagesFromOnCrawl(
       return false;
     }
     
-    // Check URL patterns first
+    // Business rule: Check URL patterns
     const shouldExcludeByUrl = shouldExcludeUrl(url);
     if (shouldExcludeByUrl) {
       const reason = getExclusionReason(url);
@@ -155,7 +134,7 @@ export async function syncPagesFromOnCrawl(
       return false;
     }
     
-    // Check status code - only index 200 or empty/null status codes
+    // Business rule: Only index 200 status codes
     const statusCode = page.status_code ? parseInt(page.status_code) : null;
     if (statusCode && statusCode !== 200) {
       console.log(`Excluding page: ${url} - Status code: ${statusCode}`);
@@ -167,6 +146,7 @@ export async function syncPagesFromOnCrawl(
   
   console.log(`Filtered to ${indexablePages.length} indexable pages (excluded ${pages.length - indexablePages.length})`);
   
+  // 3. Transform and store data (processor responsibility)
   let processed = 0;
   let failed = 0;
   
@@ -180,7 +160,7 @@ export async function syncPagesFromOnCrawl(
         onProgress(processed, indexablePages.length);
       }
       
-      // Small delay to avoid overwhelming database
+      // Rate limiting
       await new Promise(resolve => setTimeout(resolve, 50));
       
     } catch (error) {

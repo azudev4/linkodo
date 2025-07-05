@@ -54,12 +54,21 @@ interface OnCrawlCrawl {
 
 // Updated interface to match OnCrawl API field names (semicolon-delimited)
 interface OnCrawlPage {
+  // Core content
   url: string;
   title: string | null;
-  status_code: string | null;
-  word_count: string | null;
   h1: string | null;
   meta_description: string | null;
+  
+  // Technical
+  status_code: string | null;
+  word_count: string | null;
+  
+  // SEO & Linking metrics
+  depth: string | null;                 // Page depth (clicks from start)
+  inrank: string | null;                // Internal PageRank (0-10)
+  nb_outlinks: string | null;           // Number of internal links from this page
+  nb_inlinks: string | null;            // Number of incoming internal links
 }
 
 class OnCrawlClient {
@@ -155,14 +164,24 @@ class OnCrawlClient {
     
     console.log('🔍 DEBUG: Available fields from OnCrawl:', availableFields);
     
-    // Map to OnCrawl internal field names (these might be different from CSV export)
+    // Essential fields for internal linking
     const fieldMapping: { [key: string]: string } = {
+      // Core content (for embeddings)
       'url': 'url',
       'title': 'title', 
       'h1': 'h1',
+      'meta_description': 'meta_description',
+      
+      // Technical info
       'status_code': 'status_code',
       'word_count': 'word_count',
-      'meta_description': 'meta_description'
+      'language': 'language',
+      
+      // SEO & Internal linking metrics
+      'depth': 'depth',                           // How deep in site structure
+      'inrank': 'inrank',                         // Internal PageRank authority
+      'nb_outlinks': 'nb_outlinks',               // Links this page sends
+      'nb_inlinks': 'nb_inlinks'                  // Links this page receives
     };
     
     const desiredFields = Object.keys(fieldMapping).filter(field => 
@@ -182,7 +201,6 @@ class OnCrawlClient {
     console.log('🔍 DEBUG: Number of pages returned:', pages.length);
     if (pages.length > 0) {
       console.log('🔍 DEBUG: First page object:', JSON.stringify(pages[0], null, 2));
-      console.log('🔍 DEBUG: First page URL field:', pages[0].url);
     }
 
     return pages;
