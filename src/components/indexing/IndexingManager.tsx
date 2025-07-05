@@ -150,6 +150,40 @@ export function IndexingManager() {
     }
   };
 
+  const handleDownloadCSV = async () => {
+    if (!selectedProject) return;
+    
+    const project = projects.find(p => p.id === selectedProject);
+    const latestCrawlId = project?.last_crawl_id;
+    
+    if (!latestCrawlId) {
+      setError('No crawls found for this project');
+      return;
+    }
+    
+    try {
+      const response = await fetch(`/api/indexing?action=download-csv&crawlId=${latestCrawlId}`);
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `oncrawl-pages-${latestCrawlId}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        setSuccess('CSV downloaded successfully');
+      } else {
+        setError('Failed to download CSV');
+      }
+    } catch (error) {
+      setError('Error downloading CSV');
+      console.error('Download error:', error);
+    }
+  };
+
   const handleGenerateEmbeddings = async () => {
     setIsGeneratingEmbeddings(true);
     clearMessages();
@@ -375,25 +409,38 @@ export function IndexingManager() {
             </motion.div>
           )}
 
-          {/* Sync Button */}
-          <Button
-            onClick={handleSync}
-            disabled={!selectedProject || isSyncing || isLoading}
-            className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
-            size="lg"
-          >
-            {isSyncing ? (
-              <>
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                <span className="font-medium">Syncing...</span>
-              </>
-            ) : (
-              <>
-                <Download className="w-5 h-5 mr-2" />
-                <span className="font-medium">Sync from OnCrawl</span>
-              </>
-            )}
-          </Button>
+          {/* Sync Actions */}
+          <div className="flex gap-3">
+            <Button
+              onClick={handleSync}
+              disabled={!selectedProject || isSyncing || isLoading}
+              className="flex-1 h-12 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
+              size="lg"
+            >
+              {isSyncing ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  <span className="font-medium">Syncing...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-5 h-5 mr-2" />
+                  <span className="font-medium">Sync from OnCrawl</span>
+                </>
+              )}
+            </Button>
+            
+            <Button
+              onClick={handleDownloadCSV}
+              disabled={!selectedProject}
+              variant="outline"
+              className="h-12 px-6 rounded-xl border-2 hover:bg-gray-50 transition-all duration-200"
+              size="lg"
+            >
+              <Download className="w-5 h-5 mr-2" />
+              <span className="font-medium">Debug CSV</span>
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

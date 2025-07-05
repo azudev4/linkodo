@@ -4,6 +4,7 @@ import { OnCrawlClient } from '@/lib/services/oncrawl/client';
 import { syncPagesFromOnCrawl } from '@/lib/services/oncrawl/processor';
 import { batchGenerateEmbeddings } from '@/lib/services/embeding/embeddings';
 import { supabase } from '@/lib/db/client';
+import { shouldExcludeUrl, getExclusionReason } from '@/lib/utils/linkfilter';
 
 export async function GET(request: NextRequest) {
   try {
@@ -59,6 +60,47 @@ export async function GET(request: NextRequest) {
     if (action === 'projects') {
       const projects = await client.getProjects();
       return NextResponse.json({ success: true, projects });
+    }
+    
+    if (action === 'download-csv') {
+      const crawlId = searchParams.get('crawlId');
+      if (!crawlId) {
+        return NextResponse.json(
+          { error: 'crawlId required' },
+          { status: 400 }
+        );
+      }
+      
+      const pages = await client.getAllPages(crawlId);
+      
+      // Create CSV content
+      const csvHeaders = 'URL,Title,Status Code,Word Count,H1,Meta Description,Excluded,Exclusion Reason\n';
+      const csvRows = pages.map(page => {
+        const shouldExclude = shouldExcludeUrl(page.url) || (page.status_code && page.status_code !== 200);
+        const exclusionReason = shouldExclude ? 
+          (getExclusionReason(page.url) || `Status code: ${page.status_code}`) : 
+          '';
+        
+        return [
+          `"${page.url || ''}"`,
+          `"${(page.title || '').replace(/"/g, '""')}"`,
+          `"${page.status_code || ''}"`,
+          `"${page.word_count || ''}"`,
+          `"${(page.h1 || '').replace(/"/g, '""')}"`,
+          `"${(page.meta_description || '').replace(/"/g, '""')}"`,
+          `"${shouldExclude ? 'YES' : 'NO'}"`,
+          `"${exclusionReason.replace(/"/g, '""')}"`
+        ].join(',');
+      }).join('\n');
+      
+      const csvContent = csvHeaders + csvRows;
+      
+      return new Response(csvContent, {
+        headers: {
+          'Content-Type': 'text/csv',
+          'Content-Disposition': `attachment; filename="oncrawl-pages-${crawlId}.csv"`
+        }
+      });
     }
     
     return NextResponse.json(

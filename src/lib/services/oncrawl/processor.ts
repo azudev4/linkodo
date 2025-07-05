@@ -1,6 +1,8 @@
 // src/lib/services/oncrawl/processor.ts
 import { OnCrawlPage, OnCrawlClient } from './client';
 import { supabase } from '@/lib/db/client';
+import { filterStopWords } from '@/lib/utils/stopwords';
+import { shouldExcludeUrl, getExclusionReason } from '@/lib/utils/linkfilter';
 
 export interface ProcessedOnCrawlPage {
   url: string;
@@ -20,21 +22,16 @@ export interface ProcessedOnCrawlPage {
 function extractKeywords(content: string | null, title: string | null, h1: string | null): string[] {
   if (!content && !title && !h1) return [];
   
-  const textToAnalyze = [title, h1, content].filter(Boolean).join(' ').toLowerCase();
+  const textToAnalyze = [title, h1, content].filter(Boolean).join(' ');
   
   const words = textToAnalyze
+    .toLowerCase()
     .replace(/[^\w\sàâäéèêëïîôùûüÿç]/gi, ' ')
     .split(/\s+/)
     .filter(word => word.length > 3);
 
-  const stopWords = new Set([
-    'dans', 'avec', 'pour', 'plus', 'tout', 'tous', 'cette', 'ces',
-    'son', 'ses', 'leur', 'leurs', 'notre', 'nos', 'que', 'qui',
-    'quoi', 'dont', 'où', 'quand', 'comment', 'pourquoi', 'parce',
-    'car', 'donc', 'mais', 'très', 'bien', 'avoir', 'être', 'faire'
-  ]);
-
-  const filteredWords = words.filter(word => !stopWords.has(word));
+  // Use the new stop words utility
+  const filteredWords = filterStopWords(words);
 
   const wordFreq = filteredWords.reduce((acc, word) => {
     acc[word] = (acc[word] || 0) + 1;
@@ -132,17 +129,38 @@ export async function syncPagesFromOnCrawl(
   const pages = await client.getAllPages(crawlId);
   console.log(`Found ${pages.length} pages in OnCrawl crawl`);
   
+  // Filter out pages that shouldn't be indexed
+  const indexablePages = pages.filter(page => {
+    // Check URL patterns first
+    const shouldExcludeByUrl = shouldExcludeUrl(page.url);
+    if (shouldExcludeByUrl) {
+      const reason = getExclusionReason(page.url);
+      console.log(`Excluding page: ${page.url} - ${reason}`);
+      return false;
+    }
+    
+    // Check status code - only index 200 or empty/null status codes
+    if (page.status_code && page.status_code !== 200) {
+      console.log(`Excluding page: ${page.url} - Status code: ${page.status_code}`);
+      return false;
+    }
+    
+    return true;
+  });
+  
+  console.log(`Filtered to ${indexablePages.length} indexable pages (excluded ${pages.length - indexablePages.length})`);
+  
   let processed = 0;
   let failed = 0;
   
-  for (const page of pages) {
+  for (const page of indexablePages) {
     try {
       const processedPage = processOnCrawlPage(page);
       await storeOnCrawlPage(processedPage);
       processed++;
       
       if (onProgress) {
-        onProgress(processed, pages.length);
+        onProgress(processed, indexablePages.length);
       }
       
       // Small delay to avoid overwhelming database
