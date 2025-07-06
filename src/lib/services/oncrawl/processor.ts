@@ -9,7 +9,8 @@ export interface ProcessedOnCrawlPage {
   title: string | null;
   metaDescription: string | null;
   h1: string | null;
-  wordCount: number;
+  wordCount: number | null;
+  category: string;
   
   // SEO metrics for internal linking strategy
   depth: number | null;
@@ -28,6 +29,22 @@ function parseNumericField(value: string | null | undefined): number | null {
 }
 
 /**
+ * Determine page category based on URL structure
+ */
+export function determinePageCategory(url: string): string {
+  const slashCount = (url.match(/\//g) || []).length;
+  
+  // Both /tags/something and /something/ are treated as categories
+  if (url.includes('/tags/') || (url.endsWith('/') && slashCount <= 4)) {
+    return 'category';
+  }
+  if (url.includes('.html') || url.match(/,\d+\./)) return 'article';
+  if (slashCount <= 3) return 'page';
+  
+  return 'unknown';
+}
+
+/**
  * Process OnCrawl page data to our standard format
  * Pure data transformation - no content generation
  */
@@ -38,11 +55,14 @@ export function processOnCrawlPage(page: OnCrawlPage): ProcessedOnCrawlPage {
   const metaDescription = page.meta_description;
 
   // Parse numeric fields (OnCrawl sends everything as strings)
-  const wordCount = parseNumericField(page.word_count) || 0;
+  const wordCount = parseNumericField(page.word_count);
   const depth = parseNumericField(page.depth);
   const inrankDecimal = parseNumericField(page.inrank_decimal);
   const internalOutlinks = parseNumericField(page.internal_outlinks);
   const nbInlinks = parseNumericField(page.nb_inlinks);
+  
+  // Determine category based on URL structure
+  const category = determinePageCategory(url);
   
   console.log('🔍 DEBUG: Processing page:', { 
     url, 
@@ -52,7 +72,8 @@ export function processOnCrawlPage(page: OnCrawlPage): ProcessedOnCrawlPage {
     depth,
     inrankDecimal,
     internalOutlinks,
-    nbInlinks
+    nbInlinks,
+    category
   });
 
   return {
@@ -61,6 +82,7 @@ export function processOnCrawlPage(page: OnCrawlPage): ProcessedOnCrawlPage {
     metaDescription,
     h1,
     wordCount,
+    category,
     depth,
     inrankDecimal,
     internalOutlinks,
@@ -81,6 +103,7 @@ export async function storeOnCrawlPage(page: ProcessedOnCrawlPage): Promise<void
       meta_description: page.metaDescription,
       h1: page.h1,
       word_count: page.wordCount,
+      category: page.category,
       
       // SEO metrics for linking strategy
       depth: page.depth,

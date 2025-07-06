@@ -1,7 +1,7 @@
 // src/app/api/oncrawl/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { OnCrawlClient, OnCrawlPage } from '@/lib/services/oncrawl/client';
-import { syncPagesFromOnCrawl } from '@/lib/services/oncrawl/processor';
+import { syncPagesFromOnCrawl, determinePageCategory } from '@/lib/services/oncrawl/processor';
 import { shouldExcludeUrl, getExclusionReason } from '@/lib/utils/linkfilter';
 import * as XLSX from 'xlsx';
 
@@ -26,15 +26,19 @@ function generateExcel(pages: OnCrawlPage[]): Buffer {
     const internalOutlinks = page.internal_outlinks || '';
     const nbInlinks = page.nb_inlinks || '';
     
-    // Determine if page should be excluded
-    const shouldExclude = shouldExcludeUrl(url, metaDescription) || (statusCode && parseInt(statusCode) !== 200);
+    // Determine page category and exclusion status
+    const category = determinePageCategory(url);
+    const shouldExclude = !url || shouldExcludeUrl(url, metaDescription || undefined) || (statusCode && parseInt(statusCode) !== 200);
     const exclusionReason = shouldExclude ? 
-      (getExclusionReason(url, metaDescription) || `Status code: ${statusCode}`) : 
-      '';
+      (!url ? 'No URL' : 
+        statusCode && parseInt(statusCode) !== 200 ? `Status code: ${statusCode}` : 
+        getExclusionReason(url, metaDescription || undefined) || 'Unknown reason'
+      ) : '';
     
     return {
       'URL': url,
       'Title': title,
+      'Category': category,
       'Status Code': statusCode,
       'Word Count': wordCount,
       'H1': h1,
@@ -54,6 +58,7 @@ function generateExcel(pages: OnCrawlPage[]): Buffer {
   const columnWidths = [
     { wch: 60 }, // URL
     { wch: 40 }, // Title
+    { wch: 15 }, // Category
     { wch: 12 }, // Status Code
     { wch: 12 }, // Word Count
     { wch: 30 }, // H1

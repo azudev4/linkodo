@@ -4,9 +4,7 @@
  */
 export const SITE_SPECIFIC_EXCLUDED_PATTERNS = [
   // Forum and legacy content
-  'tags',   // Exclude tags (category in systemd)
   'forum',  // Exclude forum links
-  
   
   // Pagination
   '/2',
@@ -178,9 +176,104 @@ export function shouldIncludeLink(
  */
 
 /**
+ * Phrases that indicate non-content pages when found anywhere in the URL
+ */
+export const EXCLUDED_URL_PHRASES = [
+  // Auth/Account related
+  'mot-de-passe',
+  'motdepasse',
+  'password',
+  'login',
+  'logout',
+  'signin',
+  'signout',
+  'signup',
+  'register',
+  'inscription',
+  'connexion',
+  'deconnexion',
+  'auth',
+  'authentication',
+  'compte',
+  'account',
+  'profile',
+  'profil',
+  
+  // Admin/Settings
+  'admin',
+  'dashboard',
+  'tableau-de-bord',
+  'settings',
+  'parametres',
+  'preferences',
+  'configuration',
+  'wp-admin',
+  
+  // Legal/Policy
+  'privacy',
+  'confidentialite',
+  'mentions-legales',
+  'conditions',
+  'terms',
+  'legal',
+  'disclaimer',
+  'cookies',
+  'gdpr',
+  'rgpd',
+  
+  // Contact/Support
+  'contact',
+  'support',
+  'aide',
+  'help',
+  
+  // Technical/Dev
+  'debug',
+  'dev',
+  'test',
+  'staging',
+  'beta',
+  'sandbox',
+  'console',
+  'panel',
+  'backend',
+  'api'
+];
+
+/**
  * URL patterns to exclude from indexing (SEO irrelevant pages)
  */
 export const EXCLUDED_URL_PATTERNS = [
+  // Auth/Account pages
+  '/login',
+  '/logout',
+  '/signin',
+  '/signout',
+  '/signup',
+  '/register',
+  '/account',
+  '/profile',
+  '/password',
+  '/mot-de-passe',
+  '/mot-de-passe-oublie',
+  '/reset-password',
+  '/change-password',
+  '/forgot-password',
+  '/auth',
+  '/authentication',
+  '/connexion',
+  '/deconnexion',
+  '/inscription',
+  '/wp-login',
+  '/wp-admin',
+  '/admin',
+  '/dashboard',
+  '/tableau-de-bord',
+  '/preferences',
+  '/settings',
+  '/parametres',
+  '/configuration',
+  
   // Legal/Policy pages
   '/privacy',
   '/policy',
@@ -210,48 +303,6 @@ export const EXCLUDED_URL_PATTERNS = [
   '/abuse',
   '/contact-us',
   '/signaler-contenu-illicite',
-  
-  // Admin/Technical pages
-  '/admin',
-  '/dashboard',
-  '/login',
-  '/connexion',
-  '/inscription',
-  '/register',
-  '/signup',
-  '/signin',
-  '/logout',
-  '/account',
-  '/profile',
-  '/settings',
-  '/preferences',
-  '/config',
-  '/setup',
-  '/test',
-  '/mot-de-passe-oublie',
-  '/debug',
-  '/dev',
-  '/development',
-  '/staging',
-  '/beta',
-  '/alpha',
-  '/sandbox',
-  '/playground',
-  '/console',
-  '/panel',
-  '/cp',
-  '/controlpanel',
-  '/backend',
-  '/backoffice',
-  '/wp-admin',
-  '/wp-login',
-  '/administrator',
-  '/user',
-  '/users',
-  '/member',
-  '/members',
-  '/my-account',
-  '/plan',
   
   // Search/Filter pages
   '/search',
@@ -562,6 +613,8 @@ export const EXCLUDED_URL_PATTERNS = [
   '/see-all',
   '/all',
   
+  // Not sure
+  '/CP880_026',
 ];
 
 /**
@@ -669,10 +722,36 @@ export const EXCLUDED_QUERY_PARAMS = [
 ];
 
 /**
+ * Check if a URL is well-formed
+ */
+function isValidUrl(url: string): boolean {
+  // Must start with http:// or https://
+  if (!url.startsWith('http://') && !url.startsWith('https://')) return false;
+  
+  // Basic URL structure validation
+  try {
+    const urlObj = new URL(url);
+    // Must have a hostname
+    if (!urlObj.hostname) return false;
+    // Must not contain obvious non-URL characters
+    if (url.includes(';') || url.includes('?') || url.includes('"') || url.includes('\'')) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Check if a URL should be excluded from indexing
  */
 export function shouldExcludeUrl(url: string, metaDescription?: string): boolean {
   if (!url) return true;
+  
+  // Check for malformed URLs first
+  if (!isValidUrl(url)) {
+    console.log(`Excluding malformed URL: ${url}`);
+    return true;
+  }
   
   // Check for forum content in meta description
   if (metaDescription && isForumContent(metaDescription)) return true;
@@ -681,18 +760,34 @@ export function shouldExcludeUrl(url: string, metaDescription?: string): boolean
     const urlObj = new URL(url);
     const pathname = urlObj.pathname.toLowerCase();
     const search = urlObj.search.toLowerCase();
-    const pathSegments = pathname.split('/').filter(Boolean);
+    const fullUrl = url.toLowerCase();
     
-    if (SITE_SPECIFIC_EXCLUDED_PATTERNS.some(pattern => pathname.includes(pattern))) return true;
-    if (EXCLUDED_URL_PATTERNS.some(pattern => pathSegments.includes(pattern.split('/').filter(Boolean)[0]))) return true;
+    // Check for excluded phrases anywhere in the URL
+    if (EXCLUDED_URL_PHRASES.some(phrase => fullUrl.includes(phrase))) {
+      return true;
+    }
+    
+    // Check for site-specific patterns
+    if (SITE_SPECIFIC_EXCLUDED_PATTERNS.some(pattern => pathname.includes(pattern))) {
+      return true;
+    }
+    
+    // Check file extensions
     if (EXCLUDED_FILE_EXTENSIONS.some(ext => pathname.endsWith(ext))) return true;
+    
+    // Check query parameters
     if (EXCLUDED_QUERY_PARAMS.some(param => search.includes(param + '='))) return true;
     
+    // Check path depth
+    const pathSegments = pathname.split('/').filter(Boolean);
     if (pathSegments.length > 6) return true;
+    
+    // Check for long numeric IDs
     if (pathSegments.some(segment => /^\d+$/.test(segment) && segment.length > 6)) return true;
     
     return false;
   } catch (error) {
+    console.log(`Error parsing URL: ${url}`, error);
     return true;
   }
 }
@@ -710,17 +805,19 @@ export function filterIndexableUrls(urls: string[]): string[] {
 export function getExclusionReason(url: string, metaDescription?: string): string | null {
   if (!url) return 'Empty URL';
   
+  // Check for malformed URLs first
+  if (!isValidUrl(url)) {
+    return 'Malformed URL: Must be a valid http(s) URL';
+  }
+  
   // Check forum content first
   if (metaDescription && isForumContent(metaDescription)) {
-    // Use the SAME logic as isForumContent to find the matching indicator
     const text = metaDescription.toLowerCase();
     const foundIndicator = FORUM_INDICATORS.find(indicator => {
-      // If indicator starts with \b, it's a regex pattern for exact word matching
       if (indicator.startsWith('\\b')) {
         const regex = new RegExp(indicator, 'i');
         return regex.test(text);
       }
-      // Otherwise, use simple includes for phrases and longer patterns
       return text.includes(indicator.toLowerCase());
     });
     
@@ -731,24 +828,31 @@ export function getExclusionReason(url: string, metaDescription?: string): strin
     const urlObj = new URL(url);
     const pathname = urlObj.pathname.toLowerCase();
     const search = urlObj.search.toLowerCase();
-    const pathSegments = pathname.split('/').filter(Boolean);
+    const fullUrl = url.toLowerCase();
     
+    // Check for excluded phrases first
+    const excludedPhrase = EXCLUDED_URL_PHRASES.find(phrase => fullUrl.includes(phrase));
+    if (excludedPhrase) {
+      return `Contains excluded phrase: ${excludedPhrase}`;
+    }
+    
+    // Check site-specific patterns
     const sitePattern = SITE_SPECIFIC_EXCLUDED_PATTERNS.find(pattern => pathname.includes(pattern));
     if (sitePattern) return `Site-specific exclusion: ${sitePattern}`;
     
-    const urlPattern = EXCLUDED_URL_PATTERNS.find(pattern => 
-      pathSegments.includes(pattern.split('/').filter(Boolean)[0])
-    );
-    if (urlPattern) return `Excluded pattern: ${urlPattern}`;
-    
+    // Check file extensions
     const fileExt = EXCLUDED_FILE_EXTENSIONS.find(ext => pathname.endsWith(ext));
     if (fileExt) return `Excluded extension: ${fileExt}`;
     
+    // Check query parameters
     const queryParam = EXCLUDED_QUERY_PARAMS.find(param => search.includes(param + '='));
     if (queryParam) return `Excluded query param: ${queryParam}`;
     
+    // Check path depth
+    const pathSegments = pathname.split('/').filter(Boolean);
     if (pathSegments.length > 6) return `Too many path segments: ${pathSegments.length}`;
     
+    // Check for long numeric IDs
     const numericSegment = pathSegments.find(segment => /^\d+$/.test(segment) && segment.length > 6);
     if (numericSegment) return `Long numeric ID: ${numericSegment}`;
     
