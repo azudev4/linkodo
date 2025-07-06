@@ -84,7 +84,7 @@ export const FORUM_INDICATORS = [
   
   // Direct personal context
   'chez moi', 'dans ma', 'dans mon',
-  'j\'habite', 'on a', 'on habite'
+  'j\'habite', 'on a', 'on habite', 'on me',
 ];
 
 /**
