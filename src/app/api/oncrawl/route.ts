@@ -1,14 +1,17 @@
 // src/app/api/oncrawl/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { OnCrawlClient } from '@/lib/services/oncrawl/client';
+import { OnCrawlClient, OnCrawlPage } from '@/lib/services/oncrawl/client';
 import { syncPagesFromOnCrawl } from '@/lib/services/oncrawl/processor';
 import { shouldExcludeUrl, getExclusionReason } from '@/lib/utils/linkfilter';
 import * as XLSX from 'xlsx';
 
-function generateExcel(pages: any[]): Buffer {
+/**
+ * Generate Excel file from OnCrawl pages data
+ */
+function generateExcel(pages: OnCrawlPage[]): Buffer {
   const workbook = XLSX.utils.book_new();
   
-  // Prepare data for Excel with ALL available fields (CORRECTED)
+  // Prepare data for Excel with all available fields
   const excelData = pages.map(page => {
     const url = page.url || '';
     const title = page.title || '';
@@ -17,13 +20,13 @@ function generateExcel(pages: any[]): Buffer {
     const h1 = page.h1 || '';
     const metaDescription = page.meta_description || '';
     
-    // SEO metrics with CORRECTED field names
+    // SEO metrics
     const depth = page.depth || '';
-    const inrankDecimal = page.inrank_decimal || '';           // CORRECTED
-    const internalOutlinks = page.internal_outlinks || '';     // CORRECTED
+    const inrankDecimal = page.inrank_decimal || '';
+    const internalOutlinks = page.internal_outlinks || '';
     const nbInlinks = page.nb_inlinks || '';
     
-    // Determine if page should be excluded - now with meta description
+    // Determine if page should be excluded
     const shouldExclude = shouldExcludeUrl(url, metaDescription) || (statusCode && parseInt(statusCode) !== 200);
     const exclusionReason = shouldExclude ? 
       (getExclusionReason(url, metaDescription) || `Status code: ${statusCode}`) : 
@@ -36,13 +39,10 @@ function generateExcel(pages: any[]): Buffer {
       'Word Count': wordCount,
       'H1': h1,
       'Meta Description': metaDescription,
-      
-      // SEO metrics for internal linking
       'Depth': depth,
       'Internal Rank (Decimal)': inrankDecimal,
       'Internal Outlinks': internalOutlinks,
       'Inlinks Count': nbInlinks,
-      
       'Excluded': shouldExclude ? 'YES' : 'NO',
       'Exclusion Reason': exclusionReason
     };
@@ -50,7 +50,7 @@ function generateExcel(pages: any[]): Buffer {
   
   const worksheet = XLSX.utils.json_to_sheet(excelData);
   
-  // Update column widths to include new columns
+  // Set column widths
   const columnWidths = [
     { wch: 60 }, // URL
     { wch: 40 }, // Title
@@ -78,54 +78,9 @@ function generateExcel(pages: any[]): Buffer {
   return Buffer.from(excelBuffer);
 }
 
-function generateCSV(pages: any[]): string {
-  const headers = [
-    'URL', 'Title', 'Status Code', 'Word Count', 'H1', 'Meta Description',
-    'Depth', 'Internal Rank (Decimal)', 'Internal Outlinks', 'Inlinks Count',
-    'Excluded', 'Exclusion Reason'
-  ];
-  
-  const rows = pages.map((page) => {
-    const url = page.url || '';
-    const title = page.title || '';
-    const statusCode = page.status_code || '';
-    const wordCount = page.word_count || '';
-    const h1 = page.h1 || '';
-    const metaDescription = page.meta_description || '';
-    
-    // SEO metrics with CORRECTED field names
-    const depth = page.depth || '';
-    const inrankDecimal = page.inrank_decimal || '';           // CORRECTED
-    const internalOutlinks = page.internal_outlinks || '';     // CORRECTED
-    const nbInlinks = page.nb_inlinks || '';
-    
-    // Updated to include meta description in exclusion checks
-    const shouldExclude = shouldExcludeUrl(url, metaDescription) || (statusCode && parseInt(statusCode) !== 200);
-    const exclusionReason = shouldExclude ? 
-      (getExclusionReason(url, metaDescription) || `Status code: ${statusCode}`) : 
-      '';
-    
-    const fields = [
-      url,
-      title.replace(/"/g, '""'),
-      statusCode,
-      wordCount,
-      h1.replace(/"/g, '""'),
-      metaDescription.replace(/"/g, '""'),
-      depth,
-      inrankDecimal,
-      internalOutlinks,
-      nbInlinks,
-      shouldExclude ? 'YES' : 'NO',
-      exclusionReason.replace(/"/g, '""')
-    ];
-    
-    return fields.map(field => `"${field}"`).join(',');
-  });
-
-  return [headers.join(','), ...rows].join('\n');
-}
-
+/**
+ * Handle GET requests - Projects, Crawls, and Downloads
+ */
 export async function GET(request: NextRequest) {
   if (!process.env.ONCRAWL_API_TOKEN) {
     return NextResponse.json({ error: 'OnCrawl API token not configured' }, { status: 500 });
@@ -136,111 +91,89 @@ export async function GET(request: NextRequest) {
     const action = searchParams.get('action');
     const client = new OnCrawlClient(process.env.ONCRAWL_API_TOKEN);
     
+    // Get all projects
     if (action === 'projects') {
       const projects = await client.getProjects();
       return NextResponse.json({ success: true, projects });
     }
-
-    if (action === 'crawls') {
+    
+    // Download Excel file with latest accessible crawl data
+    if (action === 'download') {
       const projectId = searchParams.get('projectId');
+      
       if (!projectId) {
         return NextResponse.json({ error: 'projectId required' }, { status: 400 });
       }
       
-      const crawls = await client.getCrawls(projectId);
-      const crawlsWithStatus = await Promise.all(
-        crawls.map(async (crawl) => ({
-          ...crawl,
-          isAccessible: await client.isCrawlAccessible(crawl.id).catch(() => false)
-        }))
-      );
-      
-      return NextResponse.json({ success: true, crawls: crawlsWithStatus });
-    }
-    
-    if (action === 'download') {
-      const crawlId = searchParams.get('crawlId');
-      
-      if (!crawlId) {
-        return NextResponse.json({ error: 'crawlId required' }, { status: 400 });
+      try {
+        const { crawl, pages } = await client.getLatestAccessibleCrawlData(projectId);
+        const excelBuffer = generateExcel(pages);
+        
+        // Handle undefined crawl name
+        const safeCrawlName = (crawl.name || 'crawl').replace(/[^a-zA-Z0-9]/g, '_');
+        
+        return new Response(excelBuffer, {
+          headers: {
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition': `attachment; filename="oncrawl-${safeCrawlName}-${crawl.id}.xlsx"`,
+            'Cache-Control': 'no-cache'
+          }
+        });
+      } catch (error: any) {
+        console.error('Download error:', error);
+        return NextResponse.json({ 
+          error: error.message || 'Failed to download data from latest accessible crawl' 
+        }, { status: 500 });
       }
-      
-      const isAccessible = await client.isCrawlAccessible(crawlId);
-      if (!isAccessible) {
-        return NextResponse.json(
-          { error: 'Crawl is not accessible. The crawl must be in a "live" state to download data.' },
-          { status: 409 }
-        );
-      }
-
-      const pages = await client.getAllPages(crawlId);
-      const excelBuffer = generateExcel(pages);
-      
-      return new Response(excelBuffer, {
-        headers: {
-          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'Content-Disposition': `attachment; filename="oncrawl-pages-${crawlId}.xlsx"`,
-          'Cache-Control': 'no-cache'
-        }
-      });
     }
     
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     
   } catch (error: any) {
     console.error('OnCrawl API error:', error);
-    
-    if (error.message?.includes('must be live')) {
-      return NextResponse.json(
-        { error: 'Crawl is not accessible. The crawl must be in a "live" state to access its data.' },
-        { status: 409 }
-      );
-    }
-    
-    return NextResponse.json({ error: 'Failed to process request' }, { status: 500 });
+    return NextResponse.json({ 
+      error: error.message || 'Failed to process request' 
+    }, { status: 500 });
   }
 }
 
+/**
+ * Handle POST requests - Sync data from latest accessible crawl
+ */
 export async function POST(request: NextRequest) {
   if (!process.env.ONCRAWL_API_TOKEN) {
     return NextResponse.json({ error: 'OnCrawl API token not configured' }, { status: 500 });
   }
 
   try {
-    const { crawlId } = await request.json();
+    const { projectId } = await request.json();
     
-    if (!crawlId) {
-      return NextResponse.json({ error: 'crawlId required' }, { status: 400 });
+    if (!projectId) {
+      return NextResponse.json({ error: 'projectId required' }, { status: 400 });
     }
     
     const client = new OnCrawlClient(process.env.ONCRAWL_API_TOKEN);
-    const isAccessible = await client.isCrawlAccessible(crawlId);
     
-    if (!isAccessible) {
-      return NextResponse.json(
-        { error: 'Crawl is not accessible. The crawl must be in a "live" state to sync data.' },
-        { status: 409 }
-      );
-    }
-
-    const result = await syncPagesFromOnCrawl(crawlId);
+    // Get latest accessible crawl data
+    const { crawl } = await client.getLatestAccessibleCrawlData(projectId);
+    
+    // Sync the latest accessible crawl
+    const result = await syncPagesFromOnCrawl(crawl.id);
     
     return NextResponse.json({
       success: true,
-      ...result,
-      message: `Synced ${result.processed} pages from OnCrawl`
+      processed: result.processed,
+      failed: result.failed,
+      crawlId: crawl.id,
+      crawlName: crawl.name || 'Unnamed crawl',
+      crawlDate: crawl.created_at,
+      message: `Successfully synced ${result.processed} pages from latest accessible crawl "${crawl.name || 'Unnamed crawl'}"`
     });
     
   } catch (error: any) {
     console.error('OnCrawl sync error:', error);
-    
-    if (error.message?.includes('must be live')) {
-      return NextResponse.json(
-        { error: 'Crawl is not accessible. The crawl must be in a "live" state to access its data.' },
-        { status: 409 }
-      );
-    }
-    
-    return NextResponse.json({ error: error.message || 'Sync failed' }, { status: 500 });
+    return NextResponse.json({ 
+      error: error.message || 'Failed to sync data from latest accessible crawl' 
+    }, { status: 500 });
   }
 }

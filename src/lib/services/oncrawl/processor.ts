@@ -114,7 +114,7 @@ export async function syncPagesFromOnCrawl(
   console.log(`Starting sync from OnCrawl crawl: ${crawlId}`);
   
   // 1. Fetch raw data from OnCrawl (client responsibility)
-  const pages = await client.getAllPages(crawlId);
+  const { pages } = await client.getLatestAccessibleCrawlData(crawlId);
   console.log(`Found ${pages.length} pages in OnCrawl crawl`);
   
   // 2. Apply business rules - filter excludable pages (processor responsibility)

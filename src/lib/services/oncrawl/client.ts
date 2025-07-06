@@ -49,12 +49,12 @@ interface OnCrawlCrawl {
   project_id: string;
   name: string;
   status: string;
+  state?: string;       // "live" for accessible crawls (newer API)
+  link_status?: string; // "live" for accessible crawls (older API)
   created_at: string;
-  url: string;
-  state?: string;
+  url?: string;
 }
 
-// Updated interface to match OnCrawl API field names (semicolon-delimited)
 interface OnCrawlPage {
   // Core content
   url: string;
@@ -67,10 +67,15 @@ interface OnCrawlPage {
   word_count: string | null;
   
   // SEO & Linking metrics
-  depth: string | null;                    // Page depth (clicks from start)
-  inrank_decimal: string | null;           // Internal PageRank as decimal
-  internal_outlinks: string | null;        // Number of internal links from this page
-  nb_inlinks: string | null;               // Number of incoming internal links
+  depth: string | null;
+  inrank_decimal: string | null;
+  internal_outlinks: string | null;
+  nb_inlinks: string | null;
+}
+
+interface CrawlData {
+  crawl: OnCrawlCrawl;
+  pages: OnCrawlPage[];
 }
 
 class OnCrawlClient {
@@ -103,11 +108,6 @@ class OnCrawlClient {
       
       if (lines.length === 0) return [] as T;
       
-      console.log('🔍 DEBUG: Raw CSV first line (headers):', lines[0]);
-      if (lines.length > 1) {
-        console.log('🔍 DEBUG: Raw CSV second line (data):', lines[1]);
-      }
-      
       // OnCrawl API uses semicolon delimiter, not comma
       const headers = parseCSVLine(lines[0], ';');
       const jsonObjects = lines.slice(1).map(line => {
@@ -121,11 +121,6 @@ class OnCrawlClient {
         return obj;
       });
       
-      console.log('🔍 DEBUG: Parsed headers:', headers);
-      if (jsonObjects.length > 0) {
-        console.log('🔍 DEBUG: First parsed object:', JSON.stringify(jsonObjects[0], null, 2));
-      }
-      
       return jsonObjects as T;
     }
 
@@ -137,59 +132,30 @@ class OnCrawlClient {
     return response.projects;
   }
 
-  async getCrawls(projectId: string): Promise<OnCrawlCrawl[]> {
-    const response = await this.request<{ crawls: OnCrawlCrawl[] }>(`/projects/${projectId}/crawls`);
-    return response.crawls;
-  }
 
-  async isCrawlAccessible(crawlId: string): Promise<boolean> {
-    try {
-      await this.request<{ fields: Array<{ name: string }> }>(`/data/crawl/${crawlId}/pages/fields`);
-      return true;
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('must be live')) {
-        return false;
-      }
-      throw error;
-    }
-  }
 
-  async getAllPages(crawlId: string): Promise<OnCrawlPage[]> {
-    const isAccessible = await this.isCrawlAccessible(crawlId);
-    if (!isAccessible) {
-      throw new Error(`Crawl ${crawlId} is not accessible. The crawl must be in a 'live' state to access its data.`);
-    }
-
+  private async getAllPages(crawlId: string): Promise<OnCrawlPage[]> {
     // Get available fields
     const fieldsResponse = await this.request<{ fields: Array<{ name: string }> }>(`/data/crawl/${crawlId}/pages/fields`);
     const availableFields = fieldsResponse.fields.map(field => field.name);
     
-    console.log('🔍 DEBUG: Available fields from OnCrawl:', availableFields);
-    
     // Essential fields for internal linking
     const fieldMapping: { [key: string]: string } = {
-      // Core content (for embeddings)
       'url': 'url',
       'title': 'title', 
       'h1': 'h1',
       'meta_description': 'meta_description',
-      
-      // Technical info
       'status_code': 'status_code',
       'word_count': 'word_count',
-      
-      // SEO & Internal linking metrics
-      'depth': 'depth',                           // How deep in site structure
-      'inrank_decimal': 'inrank_decimal',         // Internal PageRank as decimal
-      'internal_outlinks': 'internal_outlinks',   // Links this page sends
-      'nb_inlinks': 'nb_inlinks'                  // Links this page receives
+      'depth': 'depth',
+      'inrank_decimal': 'inrank_decimal',
+      'internal_outlinks': 'internal_outlinks',
+      'nb_inlinks': 'nb_inlinks'
     };
     
     const desiredFields = Object.keys(fieldMapping).filter(field => 
       availableFields.includes(field)
     );
-    
-    console.log('🔍 DEBUG: Desired fields we are requesting:', desiredFields);
     
     const pages = await this.request<OnCrawlPage[]>(`/data/crawl/${crawlId}/pages?export=true`, {
       method: 'POST',
@@ -199,13 +165,54 @@ class OnCrawlClient {
       }),
     });
 
-    console.log('🔍 DEBUG: Number of pages returned:', pages.length);
-    if (pages.length > 0) {
-      console.log('🔍 DEBUG: First page object:', JSON.stringify(pages[0], null, 2));
-    }
-
     return pages;
   }
+
+  /**
+   * Get the latest accessible crawl and its pages for a project
+   * Uses the correct OnCrawl API pattern with nested resources
+   */
+  async getLatestAccessibleCrawlData(projectId: string): Promise<CrawlData> {
+    // Get project with embedded crawls using the correct API pattern
+    const projectWithCrawls = await this.request<{
+      project: OnCrawlProject;
+      crawls: OnCrawlCrawl[];
+    }>(`/projects/${projectId}?include_nested_resources=true&sort=created_at:desc`);
+    
+    const { project, crawls } = projectWithCrawls;
+    
+    if (!crawls || crawls.length === 0) {
+      throw new Error(`No crawls found for project "${project.name}"`);
+    }
+    
+    console.log(`Found ${crawls.length} total crawls for project "${project.name}"`);
+    
+    // Filter for completed and live (accessible) crawls
+    // Check both state and link_status fields for compatibility
+    const accessibleCrawls = crawls.filter(crawl => 
+      crawl.status === 'done' && 
+      (crawl.state === 'live' || crawl.link_status === 'live')
+    );
+    
+    console.log(`Found ${accessibleCrawls.length} accessible crawls (status="done" and state/link_status="live")`);
+    
+    if (accessibleCrawls.length === 0) {
+      // Debug info about what crawls are available
+      const crawlStatuses = crawls.map(c => `${c.name}: status="${c.status}", state="${c.state}", link_status="${c.link_status}"`).join('; ');
+      throw new Error(`No accessible crawls found for project "${project.name}". Available crawls: ${crawlStatuses}. Crawls must have status="done" and state="live" (or link_status="live"). Please go to OnCrawl and set a crawl to "live" status.`);
+    }
+    
+    // Use the first (newest) accessible crawl since they're already sorted by created_at:desc
+    const crawl = accessibleCrawls[0];
+    
+    console.log(`Using latest accessible crawl: ${crawl.id} (${crawl.name || 'Unnamed crawl'}) for project "${project.name}"`);
+    
+    const pages = await this.getAllPages(crawl.id);
+    
+    return { crawl, pages };
+  }
+
+
 }
 
-export { OnCrawlClient, type OnCrawlProject, type OnCrawlCrawl, type OnCrawlPage };
+export { OnCrawlClient, type OnCrawlProject, type OnCrawlCrawl, type OnCrawlPage, type CrawlData };

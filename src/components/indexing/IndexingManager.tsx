@@ -21,14 +21,8 @@ import {
   BarChart3,
   Clock,
   Zap,
-  FileSpreadsheet,
   FileText
 } from 'lucide-react';
-
-interface OnCrawlWorkspace {
-  id: string;
-  name: string;
-}
 
 interface OnCrawlProject {
   id: string;
@@ -55,9 +49,7 @@ interface DatabaseStats {
 
 export function IndexingManager() {
   const [stats, setStats] = useState<DatabaseStats | null>(null);
-  const [workspaces, setWorkspaces] = useState<OnCrawlWorkspace[]>([]);
   const [projects, setProjects] = useState<OnCrawlProject[]>([]);
-  const [selectedWorkspace, setSelectedWorkspace] = useState<string>('');
   const [selectedProject, setSelectedProject] = useState<string>('');
   
   const [isLoading, setIsLoading] = useState(false);
@@ -115,14 +107,6 @@ export function IndexingManager() {
   const handleSync = async () => {
     if (!selectedProject) return;
     
-    const project = projects.find(p => p.id === selectedProject);
-    const latestCrawlId = project?.last_crawl_id;
-    
-    if (!latestCrawlId) {
-      setError('No crawls found for this project');
-      return;
-    }
-    
     setIsSyncing(true);
     clearMessages();
     setSyncProgress(0);
@@ -131,15 +115,17 @@ export function IndexingManager() {
       const response = await fetch('/api/oncrawl', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ crawlId: latestCrawlId })
+        body: JSON.stringify({ 
+          projectId: selectedProject
+        })
       });
       
       const data = await response.json();
       
       if (data.success) {
         setSyncProgress(100);
-        setSuccess(`Successfully synced ${data.processed} pages from OnCrawl!`);
-        await loadStats(); // Refresh stats
+        setSuccess(`Successfully synced ${data.processed} pages from latest accessible crawl "${data.crawlName}"!`);
+        await loadStats();
       } else {
         setError(data.error || 'Sync failed');
       }
@@ -153,31 +139,30 @@ export function IndexingManager() {
   const handleDownload = async () => {
     if (!selectedProject) return;
     
-    const project = projects.find(p => p.id === selectedProject);
-    const latestCrawlId = project?.last_crawl_id;
-    
-    if (!latestCrawlId) {
-      setError('No crawls found for this project');
-      return;
-    }
-    
     setIsDownloading(true);
     try {
-      const response = await fetch(`/api/oncrawl?action=download&crawlId=${latestCrawlId}`);
+      const response = await fetch(`/api/oncrawl?action=download&projectId=${selectedProject}`);
       
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `oncrawl-pages-${latestCrawlId}.xlsx`;
+        
+        const contentDisposition = response.headers.get('content-disposition');
+        const filename = contentDisposition 
+          ? contentDisposition.split('filename=')[1]?.replace(/"/g, '')
+          : `oncrawl-project-${selectedProject}.xlsx`;
+        
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        setSuccess('Excel file downloaded successfully');
+        setSuccess('Excel file downloaded successfully (latest accessible crawl)');
       } else {
-        setError('Failed to download Excel file');
+        const errorData = await response.json().catch(() => ({ error: 'Download failed' }));
+        setError(errorData.error || 'Failed to download Excel file');
       }
     } catch (error) {
       setError('Error downloading Excel file');
@@ -231,6 +216,7 @@ export function IndexingManager() {
       <AnimatePresence>
         {error && (
           <motion.div
+            key="error"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -249,6 +235,7 @@ export function IndexingManager() {
         
         {success && (
           <motion.div
+            key="success"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -373,7 +360,7 @@ export function IndexingManager() {
             <span className="text-xl font-semibold text-green-600">OnCrawl Sync</span>
           </CardTitle>
           <CardDescription>
-            Import your existing crawl data from OnCrawl for internal link suggestions
+            Import data from the latest accessible crawl in your OnCrawl project
           </CardDescription>
         </CardHeader>
 
@@ -425,7 +412,7 @@ export function IndexingManager() {
               ) : (
                 <>
                   <Download className="w-5 h-5 mr-2" />
-                  <span className="font-medium">Sync from OnCrawl</span>
+                  <span className="font-medium">Sync Latest Accessible Crawl</span>
                 </>
               )}
             </Button>
