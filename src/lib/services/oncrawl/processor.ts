@@ -21,10 +21,11 @@ export interface ProcessedOnCrawlPage {
 
 /**
  * Convert string values to numbers (OnCrawl returns everything as strings)
+ * FIXED: Use parseFloat() instead of parseInt() to preserve decimal values
  */
 function parseNumericField(value: string | null | undefined): number | null {
   if (!value || value === 'null' || value === '') return null;
-  const parsed = parseInt(value, 10);
+  const parsed = parseFloat(value);
   return isNaN(parsed) ? null : parsed;
 }
 
