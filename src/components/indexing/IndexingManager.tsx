@@ -68,6 +68,7 @@ export function IndexingManager() {
   
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   // Load initial data
   useEffect(() => {
@@ -160,6 +161,7 @@ export function IndexingManager() {
       return;
     }
     
+    setIsDownloading(true);
     try {
       const response = await fetch(`/api/oncrawl?action=download&crawlId=${latestCrawlId}`);
       
@@ -180,6 +182,8 @@ export function IndexingManager() {
     } catch (error) {
       setError('Error downloading Excel file');
       console.error('Download error:', error);
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -433,12 +437,21 @@ export function IndexingManager() {
             <div className="flex gap-3">
               <Button
                 onClick={handleDownload}
-                disabled={!selectedProject}
+                disabled={!selectedProject || isDownloading}
                 variant="outline"
                 className="flex-1 h-10 rounded-lg border-2 hover:bg-gray-50 hover:text-gray-600 hover:border-gray-200 transition-all duration-200"
               >
-                <FileText className="w-4 h-4 mr-2" />
-                <span className="font-medium">Excel (.xlsx)</span>
+                {isDownloading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    <span className="font-medium">Downloading...</span>
+                  </>
+                ) : (
+                  <>
+                    <FileText className="w-4 h-4 mr-2" />
+                    <span className="font-medium">Excel (.xlsx)</span>
+                  </>
+                )}
               </Button>
             </div>
           </div>

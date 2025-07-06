@@ -7,6 +7,7 @@ export const SITE_SPECIFIC_EXCLUDED_PATTERNS = [
   'tags',   // Exclude tags (category in systemd)
   'forum',  // Exclude forum links
   
+  
   // Pagination
   '/2',
   '/3',
@@ -196,7 +197,7 @@ export const EXCLUDED_URL_PATTERNS = [
   '/warranty',
   '/license',
   '/eula',
-  
+  '/infos-legales',  
   // Contact/Support pages
   '/contact',
   '/support',
@@ -208,11 +209,14 @@ export const EXCLUDED_URL_PATTERNS = [
   '/report',
   '/abuse',
   '/contact-us',
+  '/signaler-contenu-illicite',
   
   // Admin/Technical pages
   '/admin',
   '/dashboard',
   '/login',
+  '/connexion',
+  '/inscription',
   '/register',
   '/signup',
   '/signin',
@@ -224,6 +228,7 @@ export const EXCLUDED_URL_PATTERNS = [
   '/config',
   '/setup',
   '/test',
+  '/mot-de-passe-oublie',
   '/debug',
   '/dev',
   '/development',
@@ -246,6 +251,7 @@ export const EXCLUDED_URL_PATTERNS = [
   '/member',
   '/members',
   '/my-account',
+  '/plan',
   
   // Search/Filter pages
   '/search',
@@ -706,10 +712,19 @@ export function getExclusionReason(url: string, metaDescription?: string): strin
   
   // Check forum content first
   if (metaDescription && isForumContent(metaDescription)) {
-    const foundIndicator = FORUM_INDICATORS.find(indicator => 
-      metaDescription.toLowerCase().includes(indicator.toLowerCase())
-    );
-    return `Forum '${foundIndicator}' detected`;
+    // Use the SAME logic as isForumContent to find the matching indicator
+    const text = metaDescription.toLowerCase();
+    const foundIndicator = FORUM_INDICATORS.find(indicator => {
+      // If indicator starts with \b, it's a regex pattern for exact word matching
+      if (indicator.startsWith('\\b')) {
+        const regex = new RegExp(indicator, 'i');
+        return regex.test(text);
+      }
+      // Otherwise, use simple includes for phrases and longer patterns
+      return text.includes(indicator.toLowerCase());
+    });
+    
+    return `Forum '${foundIndicator || 'unknown pattern'}' detected`;
   }
   
   try {
