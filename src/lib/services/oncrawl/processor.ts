@@ -1,4 +1,4 @@
-// src/lib/services/oncrawl/processor.ts - OPTIMIZED VERSION
+// src/lib/services/oncrawl/processor.ts - FIXED VERSION
 
 import { OnCrawlPage, OnCrawlClient } from './client';
 import { supabase } from '@/lib/db/client';
@@ -80,282 +80,82 @@ export function processOnCrawlPage(page: OnCrawlPage): ProcessedOnCrawlPage {
 }
 
 /**
- * OPTIMIZED: Store pages in batches for much better performance
- * FAST: 1000 pages in ~2 seconds instead of ~60 seconds
+ * Check if a page has actually changed compared to existing data
  */
-export async function batchStoreOnCrawlPages(
-  pages: ProcessedOnCrawlPage[],
-  batchSize: number = 100
-): Promise<{ processed: number; failed: number }> {
-  let processed = 0;
-  let failed = 0;
-
-  console.log(`📦 Storing ${pages.length} pages in batches of ${batchSize}...`);
-
-  // Process in batches
-  for (let i = 0; i < pages.length; i += batchSize) {
-    const batch = pages.slice(i, i + batchSize);
-    
-    try {
-      const batchData = batch.map(page => ({
-        url: page.url,
-        title: page.title,
-        meta_description: page.metaDescription,
-        h1: page.h1,
-        word_count: page.wordCount,
-        category: page.category,
-        depth: page.depth,
-        inrank_decimal: page.inrankDecimal,
-        internal_outlinks: page.internalOutlinks,
-        nb_inlinks: page.nbInlinks,
-        embedding: null,
-        last_crawled: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }));
-
-      // 🚀 BATCH UPSERT - Much faster!
-      const { error } = await supabase
-        .from('pages')
-        .upsert(batchData, {
-          onConflict: 'url'
-        });
-
-      if (error) {
-        console.error(`❌ Batch ${i / batchSize + 1} failed:`, error);
-        failed += batch.length;
-      } else {
-        processed += batch.length;
-        console.log(`✅ Batch ${i / batchSize + 1}/${Math.ceil(pages.length / batchSize)} completed (${processed}/${pages.length})`);
-      }
-
-    } catch (error) {
-      console.error(`❌ Batch ${i / batchSize + 1} error:`, error);
-      failed += batch.length;
-    }
-
-    // Small delay between batches to be nice to the database
-    if (i + batchSize < pages.length) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-  }
-
-  return { processed, failed };
+function hasPageChanged(existing: any, newPage: ProcessedOnCrawlPage): boolean {
+  // Compare all relevant fields that come from OnCrawl
+  return (
+    existing.title !== newPage.title ||
+    existing.meta_description !== newPage.metaDescription ||
+    existing.h1 !== newPage.h1 ||
+    existing.word_count !== newPage.wordCount ||
+    existing.category !== newPage.category ||
+    existing.depth !== newPage.depth ||
+    existing.inrank_decimal !== newPage.inrankDecimal ||
+    existing.internal_outlinks !== newPage.internalOutlinks ||
+    existing.nb_inlinks !== newPage.nbInlinks
+  );
 }
 
 /**
- * SIMPLE & RELIABLE sync that works for any dataset size
- * Fast upsert with embedding preservation - no overengineering!
+ * 🔧 FIXED: Smart change detection sync with stale page cleanup
  */
-export async function ultraFastSync(
+async function smartChangeDetectionSyncWithCleanup(
   pages: ProcessedOnCrawlPage[]
-): Promise<{ added: number; updated: number; unchanged: number; failed: number }> {
-  console.log(`🚀 Starting reliable sync for ${pages.length} pages...`);
+): Promise<{ added: number; updated: number; unchanged: number; failed: number; removed: number }> {
+  console.log(`🧠 Starting SMART sync with change detection for ${pages.length} pages...`);
   const startTime = Date.now();
   
-  // Get existing embeddings to preserve them (chunked for large datasets)
-  console.log(`🔍 Fetching existing embeddings to preserve...`);
-  const existingEmbeddings = new Map();
-  const chunkSize = 1000; // Safe for any database
+  // Step 1: 🔧 FIXED - Get ALL existing pages with pagination (Supabase limits to 1000 by default)
+  console.log(`🔍 Fetching ALL existing pages from database...`);
   
-  for (let i = 0; i < pages.length; i += chunkSize) {
-    const chunk = pages.slice(i, i + chunkSize);
-    const urls = chunk.map(p => p.url);
-    
-    const { data: existingChunk } = await supabase
+  const allExistingPages: any[] = [];
+  let hasMore = true;
+  let offset = 0;
+  const batchSize = 1000;
+  
+  while (hasMore) {
+    const { data: batch, error: fetchError } = await supabase
       .from('pages')
-      .select('url, embedding')
-      .in('url', urls);
+      .select('url, title, meta_description, h1, word_count, category, depth, inrank_decimal, internal_outlinks, nb_inlinks, embedding, last_crawled')
+      .range(offset, offset + batchSize - 1);
     
-    existingChunk?.forEach(page => {
-      if (page.embedding) {
-        existingEmbeddings.set(page.url, page.embedding);
-      }
-    });
-  }
-
-  console.log(`🔍 Found ${existingEmbeddings.size} existing embeddings to preserve`);
-
-  // Batch upsert everything with preserved embeddings
-  let processed = 0;
-  let failed = 0;
-  const batchSize = 100; // Reliable batch size
-
-  for (let i = 0; i < pages.length; i += batchSize) {
-    const batch = pages.slice(i, i + batchSize);
+    if (fetchError) {
+      console.error(`❌ Error fetching existing pages batch:`, fetchError);
+      throw new Error(`Failed to fetch existing pages: ${fetchError.message}`);
+    }
     
-    try {
-      const batchData = batch.map(page => ({
-        url: page.url,
-        title: page.title,
-        meta_description: page.metaDescription,
-        h1: page.h1,
-        word_count: page.wordCount,
-        category: page.category,
-        depth: page.depth,
-        inrank_decimal: page.inrankDecimal,
-        internal_outlinks: page.internalOutlinks,
-        nb_inlinks: page.nbInlinks,
-        embedding: existingEmbeddings.get(page.url) || null, // ✅ Preserve embeddings
-        last_crawled: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }));
-
-      const { error } = await supabase
-        .from('pages')
-        .upsert(batchData, { onConflict: 'url' });
-
-      if (error) {
-        console.error(`❌ Batch failed:`, error);
-        failed += batch.length;
+    if (batch && batch.length > 0) {
+      allExistingPages.push(...batch);
+      console.log(`🔍 Fetched batch ${Math.floor(offset / batchSize) + 1}: ${batch.length} pages (total: ${allExistingPages.length})`);
+      
+      if (batch.length < batchSize) {
+        hasMore = false; // Last batch
       } else {
-        processed += batch.length;
-        console.log(`✅ Batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(pages.length / batchSize)} completed (${processed}/${pages.length})`);
+        offset += batchSize;
       }
-
-    } catch (error) {
-      console.error(`❌ Batch error:`, error);
-      failed += batch.length;
+    } else {
+      hasMore = false;
     }
   }
-
-  const duration = Date.now() - startTime;
-  console.log(`✅ Reliable sync completed in ${duration}ms:
-    🔄 ${processed} pages synced (upserted)
-    ❌ ${failed} failed
-  `);
-
-  // Simple return - just report what we processed
-  return { 
-    added: 0,           // We don't distinguish, just report as "updated"
-    updated: processed, // All successful operations
-    unchanged: 0,       // We don't track this to keep it simple
-    failed 
-  };
-}
-
-/**
- * Fast upsert sync for large datasets (preserves embeddings)
- */
-async function fastUpsertSync(
-  pages: ProcessedOnCrawlPage[]
-): Promise<{ added: number; updated: number; unchanged: number; failed: number }> {
-  console.log(`🚀 Starting fast upsert sync for ${pages.length} pages...`);
   
-  // Get existing embeddings to preserve them
-  console.log(`🔍 Fetching existing embeddings...`);
-  const existingEmbeddings = new Map();
-  const chunkSize = 1000;
+  console.log(`🔍 Found ${allExistingPages.length} total pages in database`);
   
-  for (let i = 0; i < pages.length; i += chunkSize) {
-    const chunk = pages.slice(i, i + chunkSize);
-    const urls = chunk.map(p => p.url);
-    
-    const { data: existingChunk } = await supabase
-      .from('pages')
-      .select('url, embedding')
-      .in('url', urls);
-    
-    existingChunk?.forEach(page => {
-      if (page.embedding) {
-        existingEmbeddings.set(page.url, page.embedding);
-      }
-    });
-  }
-
-  console.log(`🔍 Found ${existingEmbeddings.size} existing embeddings to preserve`);
-
-  // Batch upsert with preserved embeddings
-  let processed = 0;
-  let failed = 0;
-  const batchSize = 100;
-
-  for (let i = 0; i < pages.length; i += batchSize) {
-    const batch = pages.slice(i, i + batchSize);
-    
-    try {
-      const batchData = batch.map(page => ({
-        url: page.url,
-        title: page.title,
-        meta_description: page.metaDescription,
-        h1: page.h1,
-        word_count: page.wordCount,
-        category: page.category,
-        depth: page.depth,
-        inrank_decimal: page.inrankDecimal,
-        internal_outlinks: page.internalOutlinks,
-        nb_inlinks: page.nbInlinks,
-        embedding: existingEmbeddings.get(page.url) || null, // ✅ Preserve embeddings
-        last_crawled: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }));
-
-      const { error } = await supabase
-        .from('pages')
-        .upsert(batchData, { onConflict: 'url' });
-
-      if (error) {
-        console.error(`❌ Fast upsert batch failed:`, error);
-        failed += batch.length;
-      } else {
-        processed += batch.length;
-        console.log(`✅ Fast upsert batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(pages.length / batchSize)} completed (${processed}/${pages.length})`);
-      }
-
-    } catch (error) {
-      console.error(`❌ Fast upsert batch error:`, error);
-      failed += batch.length;
-    }
-  }
-
-  // For large datasets, we can't easily distinguish added vs updated, so report as "processed"
-  return { 
-    added: 0, 
-    updated: processed, 
-    unchanged: 0, 
-    failed 
-  };
-}
-
-/**
- * Smart change detection sync for smaller datasets
- */
-async function smartChangeDetectionSync(
-  pages: ProcessedOnCrawlPage[]
-): Promise<{ added: number; updated: number; unchanged: number; failed: number }> {
-  // Step 1: Get all existing page data in chunks
-  console.log(`🔍 Checking existing pages in database...`);
+  // Create maps for efficient lookups
   const existingPageMap = new Map();
-  const chunkSize = 1000; // Safe limit for .in() queries
+  const allExistingUrls = new Set();
   
-  for (let i = 0; i < pages.length; i += chunkSize) {
-    const chunk = pages.slice(i, i + chunkSize);
-    const urls = chunk.map(p => p.url);
-    
-    console.log(`🔍 Checking chunk ${Math.floor(i / chunkSize) + 1}/${Math.ceil(pages.length / chunkSize)} (${urls.length} URLs)...`);
-    
-    const { data: existingChunk, error } = await supabase
-      .from('pages')
-      .select('url, title, meta_description, h1, word_count, category, depth, inrank_decimal, internal_outlinks, nb_inlinks, embedding')
-      .in('url', urls);
-    
-    if (error) {
-      console.error(`❌ Error checking existing pages chunk:`, error);
-      continue;
-    }
-    
-    // Add to map
-    existingChunk?.forEach(page => {
-      existingPageMap.set(page.url, page);
-    });
-  }
-
-  console.log(`🔍 Found ${existingPageMap.size} existing pages in database`);
-
-  // Step 2: Categorize pages: new, changed, unchanged
+  allExistingPages.forEach(page => {
+    existingPageMap.set(page.url, page);
+    allExistingUrls.add(page.url);
+  });
+  
+  // Step 2: Categorize current OnCrawl pages
+  const currentOnCrawlUrls = new Set(pages.map(p => p.url));
   const newPages: ProcessedOnCrawlPage[] = [];
   const changedPages: ProcessedOnCrawlPage[] = [];
   const unchangedPages: ProcessedOnCrawlPage[] = [];
-
+  
   for (const page of pages) {
     const existing = existingPageMap.get(page.url);
     
@@ -371,15 +171,24 @@ async function smartChangeDetectionSync(
       }
     }
   }
-
-  console.log(`📊 Smart analysis: ${newPages.length} new, ${changedPages.length} changed, ${unchangedPages.length} unchanged`);
+  
+  // Step 3: 🔧 FIXED - Find stale pages (in DB but not in current OnCrawl)
+  const staleUrls = Array.from(allExistingUrls).filter((url): url is string => typeof url === 'string' && !currentOnCrawlUrls.has(url));
+  
+  console.log(`📊 Smart analysis:
+    ✨ ${newPages.length} new pages
+    🔄 ${changedPages.length} changed pages  
+    ⚪ ${unchangedPages.length} unchanged pages
+    🗑️  ${staleUrls.length} stale pages (will be removed)
+  `);
 
   let added = 0;
   let updated = 0;
   let unchanged = unchangedPages.length;
   let failed = 0;
+  let removed = 0;
 
-  // Step 3: Batch insert new pages
+  // Step 4: Insert new pages
   if (newPages.length > 0) {
     console.log(`📥 Inserting ${newPages.length} new pages...`);
     const insertResult = await batchInsertNewPages(newPages);
@@ -387,7 +196,7 @@ async function smartChangeDetectionSync(
     failed += insertResult.failed;
   }
 
-  // Step 4: Batch update only changed pages (preserve embeddings)
+  // Step 5: Update only changed pages (preserve embeddings)
   if (changedPages.length > 0) {
     console.log(`🔄 Updating ${changedPages.length} changed pages...`);
     const updateResult = await batchUpdateChangedPages(changedPages, existingPageMap);
@@ -395,13 +204,69 @@ async function smartChangeDetectionSync(
     failed += updateResult.failed;
   }
 
-  // Step 5: Touch unchanged pages (update last_crawled only)
+  // Step 6: Touch unchanged pages (update last_crawled only)
   if (unchangedPages.length > 0) {
     console.log(`⚪ Touching ${unchangedPages.length} unchanged pages (last_crawled only)...`);
     await batchTouchUnchangedPages(unchangedPages);
   }
 
-  return { added, updated, unchanged, failed };
+  // Step 7: 🔧 FIXED - Remove stale pages
+  if (staleUrls.length > 0) {
+    console.log(`🗑️  Removing ${staleUrls.length} stale pages...`);
+    const removeResult = await batchRemoveStalePages(staleUrls);
+    removed = removeResult.removed;
+    failed += removeResult.failed;
+  }
+
+  const duration = Date.now() - startTime;
+  console.log(`✅ Smart sync with cleanup completed in ${duration}ms:
+    ✨ ${added} added
+    🔄 ${updated} updated  
+    ⚪ ${unchanged} unchanged
+    🗑️  ${removed} removed (stale)
+    ❌ ${failed} failed
+  `);
+
+  return { added, updated, unchanged, failed, removed };
+}
+
+/**
+ * 🔧 NEW: Remove stale pages that are no longer in OnCrawl
+ */
+async function batchRemoveStalePages(
+  staleUrls: string[],
+  batchSize: number = 100
+): Promise<{ removed: number; failed: number }> {
+  let removed = 0;
+  let failed = 0;
+
+  console.log(`🗑️  Removing ${staleUrls.length} stale pages in batches...`);
+
+  for (let i = 0; i < staleUrls.length; i += batchSize) {
+    const batch = staleUrls.slice(i, i + batchSize);
+    
+    try {
+      const { error, count } = await supabase
+        .from('pages')
+        .delete()
+        .in('url', batch);
+
+      if (error) {
+        console.error(`❌ Remove stale pages batch failed:`, error);
+        failed += batch.length;
+      } else {
+        const actualRemoved = count || batch.length;
+        removed += actualRemoved;
+        console.log(`🗑️  Removed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(staleUrls.length / batchSize)} (${actualRemoved} pages)`);
+      }
+
+    } catch (error) {
+      console.error(`❌ Remove stale pages batch error:`, error);
+      failed += batch.length;
+    }
+  }
+
+  return { removed, failed };
 }
 
 /**
@@ -409,7 +274,7 @@ async function smartChangeDetectionSync(
  */
 async function batchInsertNewPages(
   pages: ProcessedOnCrawlPage[],
-  batchSize: number = 200
+  batchSize: number = 100
 ): Promise<{ processed: number; failed: number }> {
   let processed = 0;
   let failed = 0;
@@ -444,6 +309,7 @@ async function batchInsertNewPages(
         failed += batch.length;
       } else {
         processed += batch.length;
+        console.log(`✨ New pages batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(pages.length / batchSize)} completed`);
       }
 
     } catch (error) {
@@ -453,24 +319,6 @@ async function batchInsertNewPages(
   }
 
   return { processed, failed };
-}
-
-/**
- * Check if a page has actually changed compared to existing data
- */
-function hasPageChanged(existing: any, newPage: ProcessedOnCrawlPage): boolean {
-  // Compare all relevant fields that come from OnCrawl
-  return (
-    existing.title !== newPage.title ||
-    existing.meta_description !== newPage.metaDescription ||
-    existing.h1 !== newPage.h1 ||
-    existing.word_count !== newPage.wordCount ||
-    existing.category !== newPage.category ||
-    existing.depth !== newPage.depth ||
-    existing.inrank_decimal !== newPage.inrankDecimal ||
-    existing.internal_outlinks !== newPage.internalOutlinks ||
-    existing.nb_inlinks !== newPage.nbInlinks
-  );
 }
 
 /**
@@ -519,6 +367,7 @@ async function batchUpdateChangedPages(
         failed += batch.length;
       } else {
         processed += batch.length;
+        console.log(`🔄 Changed pages batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(pages.length / batchSize)} completed`);
       }
 
     } catch (error) {
@@ -555,6 +404,8 @@ async function batchTouchUnchangedPages(
 
       if (error) {
         console.error(`❌ Touch unchanged pages batch failed:`, error);
+      } else {
+        console.log(`⚪ Touched unchanged batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(pages.length / batchSize)}`);
       }
 
     } catch (error) {
@@ -564,16 +415,15 @@ async function batchTouchUnchangedPages(
 }
 
 /**
- * OPTIMIZED: Main sync function using simple reliable approach
- * Fast, works for any dataset size, preserves embeddings
+ * 🔧 FIXED: Main sync function now uses smart change detection with cleanup
  */
 export async function syncPagesFromOnCrawlOptimized(
   projectId: string,
   onProgress?: (processed: number, total: number) => void
-): Promise<{ processed: number; failed: number; added: number; updated: number; unchanged: number }> {
+): Promise<{ processed: number; failed: number; added: number; updated: number; unchanged: number; removed: number }> {
   const client = new OnCrawlClient(process.env.ONCRAWL_API_TOKEN!);
   
-  console.log(`🚀 Starting RELIABLE sync from OnCrawl project: ${projectId}`);
+  console.log(`🚀 Starting SMART sync with change detection from OnCrawl project: ${projectId}`);
   const overallStartTime = Date.now();
   
   // 1. Fetch raw data from OnCrawl
@@ -603,45 +453,50 @@ export async function syncPagesFromOnCrawlOptimized(
   const filterDuration = Date.now() - filterStartTime;
   console.log(`🔍 Filtered to ${indexablePages.length} indexable pages (excluded ${pages.length - indexablePages.length}) in ${filterDuration}ms`);
   
-  // 3. Simple reliable sync
-  console.log(`💾 Starting database sync...`);
+  // 3. 🔧 FIXED: Use smart sync with change detection and cleanup
+  console.log(`💾 Starting SMART database sync with change detection...`);
   const syncStartTime = Date.now();
-  const result = await ultraFastSync(indexablePages);
+  const result = await smartChangeDetectionSyncWithCleanup(indexablePages);
   const syncDuration = Date.now() - syncStartTime;
   
   const overallDuration = Date.now() - overallStartTime;
   
-  console.log(`🎉 RELIABLE sync completed in ${overallDuration}ms total:
+  console.log(`🎉 SMART sync completed in ${overallDuration}ms total:
     📡 OnCrawl fetch: ${fetchDuration}ms
     🔍 Filtering: ${filterDuration}ms  
     💾 Database sync: ${syncDuration}ms
-    🔄 ${result.updated} pages synced
+    ✨ ${result.added} added
+    🔄 ${result.updated} updated
+    ⚪ ${result.unchanged} unchanged
+    🗑️  ${result.removed} removed (stale)
     ❌ ${result.failed} failed
-    🚀 Performance: ${Math.round(result.updated / (overallDuration / 1000))} pages/second
+    🚀 Performance: ${Math.round((result.added + result.updated + result.unchanged) / (overallDuration / 1000))} pages/second
   `);
   
   // Report final progress
   if (onProgress) {
-    onProgress(result.updated, indexablePages.length);
+    onProgress(result.added + result.updated + result.unchanged, indexablePages.length);
   }
   
   return { 
-    processed: result.updated, 
+    processed: result.added + result.updated + result.unchanged, 
     failed: result.failed,
     added: result.added,
     updated: result.updated,
-    unchanged: result.unchanged
+    unchanged: result.unchanged,
+    removed: result.removed
   };
 }
 
 // Keep legacy function for backwards compatibility (but mark as deprecated)
 /**
- * @deprecated Use syncPagesFromOnCrawlOptimized instead for 30x better performance
+ * @deprecated Use syncPagesFromOnCrawlOptimized instead for proper change detection
  */
 export async function syncPagesFromOnCrawl(
   projectId: string,
   onProgress?: (processed: number, total: number) => void
 ): Promise<{ processed: number; failed: number }> {
-  console.warn('⚠️  Using deprecated syncPagesFromOnCrawl. Use syncPagesFromOnCrawlOptimized for 30x better performance!');
-  return syncPagesFromOnCrawlOptimized(projectId, onProgress);
+  console.warn('⚠️  Using deprecated syncPagesFromOnCrawl. Use syncPagesFromOnCrawlOptimized for proper change detection!');
+  const result = await syncPagesFromOnCrawlOptimized(projectId, onProgress);
+  return { processed: result.processed, failed: result.failed };
 }
