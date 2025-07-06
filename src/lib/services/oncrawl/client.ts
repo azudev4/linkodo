@@ -1,4 +1,5 @@
 // src/lib/services/oncrawl/client.ts
+import { decodeHtmlEntities } from '@/lib/utils/html-entities';
 
 /**
  * Properly parses a CSV line respecting quoted fields
@@ -28,9 +29,10 @@ function parseCSVLine(line: string, delimiter: string = ','): (string | null)[] 
   
   result.push(current.trim());
   return result.map(value => {
-    // Clean up quotes and whitespace
+    // Clean up quotes and whitespace, then decode HTML entities
     const cleaned = value.replace(/^"(.*)"$/, '$1').trim();
-    return cleaned === '' ? null : cleaned;
+    const decoded = decodeHtmlEntities(cleaned);
+    return decoded === '' ? null : decoded;
   });
 }
 

@@ -160,7 +160,6 @@ export async function GET(request: NextRequest) {
     
     if (action === 'download') {
       const crawlId = searchParams.get('crawlId');
-      const format = searchParams.get('format') || 'excel'; // Default to Excel
       
       if (!crawlId) {
         return NextResponse.json({ error: 'crawlId required' }, { status: 400 });
@@ -175,31 +174,15 @@ export async function GET(request: NextRequest) {
       }
 
       const pages = await client.getAllPages(crawlId);
+      const excelBuffer = generateExcel(pages);
       
-      if (format === 'excel') {
-        const excelBuffer = generateExcel(pages);
-        
-        return new Response(excelBuffer, {
-          headers: {
-            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'Content-Disposition': `attachment; filename="oncrawl-pages-${crawlId}.xlsx"`,
-            'Cache-Control': 'no-cache'
-          }
-        });
-      } else {
-        // CSV format (legacy)
-        const csvContent = generateCSV(pages);
-        console.log('🔍 DEBUG: First 200 chars of generated CSV:', csvContent.substring(0, 200));
-        
-        return new Response(csvContent, {
-          headers: {
-            'Content-Type': 'text/csv; charset=utf-8',
-            'Content-Disposition': `attachment; filename="oncrawl-pages-${crawlId}.csv"`,
-            'Cache-Control': 'no-cache',
-            'Content-Encoding': 'identity'
-          }
-        });
-      }
+      return new Response(excelBuffer, {
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="oncrawl-pages-${crawlId}.xlsx"`,
+          'Cache-Control': 'no-cache'
+        }
+      });
     }
     
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
