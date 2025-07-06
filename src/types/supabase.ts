@@ -9,48 +9,6 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      crawl_jobs: {
-        Row: {
-          base_url: string
-          completed_at: string | null
-          created_at: string | null
-          error_message: string | null
-          exclude_patterns: string[] | null
-          id: string
-          max_pages: number | null
-          pages_crawled: number | null
-          pages_total: number | null
-          started_at: string | null
-          status: string
-        }
-        Insert: {
-          base_url: string
-          completed_at?: string | null
-          created_at?: string | null
-          error_message?: string | null
-          exclude_patterns?: string[] | null
-          id?: string
-          max_pages?: number | null
-          pages_crawled?: number | null
-          pages_total?: number | null
-          started_at?: string | null
-          status?: string
-        }
-        Update: {
-          base_url?: string
-          completed_at?: string | null
-          created_at?: string | null
-          error_message?: string | null
-          exclude_patterns?: string[] | null
-          id?: string
-          max_pages?: number | null
-          pages_crawled?: number | null
-          pages_total?: number | null
-          started_at?: string | null
-          status?: string
-        }
-        Relationships: []
-      }
       pages: {
         Row: {
           content_snippet: string | null

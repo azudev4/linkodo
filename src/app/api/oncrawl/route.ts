@@ -152,22 +152,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'projectId required' }, { status: 400 });
     }
     
-    const client = new OnCrawlClient(process.env.ONCRAWL_API_TOKEN);
-    
-    // Get latest accessible crawl data
-    const { crawl } = await client.getLatestAccessibleCrawlData(projectId);
-    
-    // Sync the latest accessible crawl
-    const result = await syncPagesFromOnCrawl(crawl.id);
+    // Pass projectId directly to sync function - it will get the latest crawl
+    const result = await syncPagesFromOnCrawl(projectId);
     
     return NextResponse.json({
       success: true,
       processed: result.processed,
       failed: result.failed,
-      crawlId: crawl.id,
-      crawlName: crawl.name || 'Unnamed crawl',
-      crawlDate: crawl.created_at,
-      message: `Successfully synced ${result.processed} pages from latest accessible crawl "${crawl.name || 'Unnamed crawl'}"`
+      message: `Successfully synced ${result.processed} pages from latest accessible crawl`
     });
     
   } catch (error: any) {

@@ -106,16 +106,16 @@ export async function storeOnCrawlPage(page: ProcessedOnCrawlPage): Promise<void
  * This is why we have a processor: business logic coordination
  */
 export async function syncPagesFromOnCrawl(
-  crawlId: string, 
+  projectId: string,  // Takes projectId to get latest accessible crawl
   onProgress?: (processed: number, total: number) => void
 ): Promise<{ processed: number; failed: number }> {
   const client = new OnCrawlClient(process.env.ONCRAWL_API_TOKEN!);
   
-  console.log(`Starting sync from OnCrawl crawl: ${crawlId}`);
+  console.log(`Starting sync from OnCrawl project: ${projectId}`);
   
   // 1. Fetch raw data from OnCrawl (client responsibility)
-  const { pages } = await client.getLatestAccessibleCrawlData(crawlId);
-  console.log(`Found ${pages.length} pages in OnCrawl crawl`);
+  const { crawl, pages } = await client.getLatestAccessibleCrawlData(projectId);
+  console.log(`Found ${pages.length} pages in OnCrawl crawl: ${crawl.id} (${crawl.name || 'Unnamed crawl'})`);
   
   // 2. Apply business rules - filter excludable pages (processor responsibility)
   const indexablePages = pages.filter(page => {
