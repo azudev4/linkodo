@@ -124,7 +124,24 @@ export function IndexingManager() {
       
       if (data.success) {
         setSyncProgress(100);
-        setSuccess(`Successfully synced ${data.processed} pages from latest accessible crawl "${data.crawlName}"!`);
+        
+        // 🚀 Enhanced success message with detailed breakdown
+        const duration = data.duration_ms || 0;
+        const rate = duration > 0 ? Math.round(data.processed / (duration / 1000)) : 0;
+        
+        // Build detailed message
+        const parts = [];
+        if (data.added > 0) parts.push(`📥 ${data.added} added`);
+        if (data.updated > 0) parts.push(`🔄 ${data.updated} updated`);
+        if (data.unchanged > 0) parts.push(`⚪ ${data.unchanged} unchanged`);
+        if (data.failed > 0) parts.push(`❌ ${data.failed} failed`);
+        
+        const breakdown = parts.length > 0 ? parts.join(', ') : 'No changes';
+        
+        setSuccess(
+          `🚀 Smart sync completed in ${duration}ms (${rate} pages/sec): ${breakdown}`
+        );
+        
         await loadStats();
       } else {
         setError(data.error || 'Sync failed');

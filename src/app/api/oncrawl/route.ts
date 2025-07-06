@@ -1,7 +1,7 @@
-// src/app/api/oncrawl/route.ts
+// src/app/api/oncrawl/route.ts - OPTIMIZED VERSION
 import { NextRequest, NextResponse } from 'next/server';
 import { OnCrawlClient, OnCrawlPage } from '@/lib/services/oncrawl/client';
-import { syncPagesFromOnCrawl, determinePageCategory } from '@/lib/services/oncrawl/processor';
+import { syncPagesFromOnCrawlOptimized, determinePageCategory } from '@/lib/services/oncrawl/processor';
 import { shouldExcludeUrl, getExclusionReason } from '@/lib/utils/linkfilter';
 import * as XLSX from 'xlsx';
 
@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * Handle POST requests - Sync data from latest accessible crawl
+ * Handle POST requests - OPTIMIZED Sync data from latest accessible crawl
  */
 export async function POST(request: NextRequest) {
   if (!process.env.ONCRAWL_API_TOKEN) {
@@ -157,18 +157,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'projectId required' }, { status: 400 });
     }
     
-    // Pass projectId directly to sync function - it will get the latest crawl
-    const result = await syncPagesFromOnCrawl(projectId);
+    console.log(`🚀 Starting OPTIMIZED sync for project: ${projectId}`);
+    const startTime = Date.now();
+    
+    // Use the new optimized sync function
+    const result = await syncPagesFromOnCrawlOptimized(projectId);
+    
+    const duration = Date.now() - startTime;
+    
+    console.log(`✅ Optimized sync completed in ${duration}ms:
+      📥 Processed: ${result.processed} pages
+      ❌ Failed: ${result.failed} pages
+    `);
     
     return NextResponse.json({
       success: true,
       processed: result.processed,
       failed: result.failed,
-      message: `Successfully synced ${result.processed} pages from latest accessible crawl`
+      duration_ms: duration,
+      message: `Successfully synced ${result.processed} pages from latest accessible crawl in ${duration}ms`
     });
     
   } catch (error: any) {
-    console.error('OnCrawl sync error:', error);
+    console.error('OnCrawl optimized sync error:', error);
     return NextResponse.json({ 
       error: error.message || 'Failed to sync data from latest accessible crawl' 
     }, { status: 500 });
