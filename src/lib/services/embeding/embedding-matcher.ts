@@ -7,6 +7,9 @@ import { embeddingFromString } from './embeddings';
 // Initialize OpenAI
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
+// Default configuration values
+const DEFAULT_SIMILARITY_THRESHOLD = 0.7;
+
 export interface MatchOption {
   id: string;
   title: string;
@@ -140,8 +143,8 @@ async function findSimilarPagesEnhanced(
     }
 
     // Filter by original similarity threshold
-    const filteredResults = results.filter((r: any) => r.similarity >= minSimilarity);
-    console.log(`📝 After filtering (similarity >= ${minSimilarity}): ${filteredResults.length} results`);
+    const filteredResults = results.filter((r: any) => r.similarity >= DEFAULT_SIMILARITY_THRESHOLD);
+    console.log(`📝 After filtering (similarity >= ${DEFAULT_SIMILARITY_THRESHOLD}): ${filteredResults.length} results`);
 
     // Map to our interface with real schema
     const pages: PageWithEmbedding[] = filteredResults.slice(0, maxResults).map((row: any) => ({
@@ -296,7 +299,7 @@ function createMatchOptions(
  */
 async function findCandidateMatches(
   candidate: AnchorCandidate,
-  minSimilarity: number = 0.7,
+  minSimilarity: number = DEFAULT_SIMILARITY_THRESHOLD,
   maxOptions: number = 3
 ): Promise<AnchorMatch & { debugInfo?: any }> {
   console.log(`\n🎯 Processing candidate: "${candidate.text}"`);
@@ -350,7 +353,7 @@ export async function findAnchorMatches(
   } = {}
 ): Promise<MatchingResult> {
   const {
-    minSimilarity = 0.7,
+    minSimilarity = DEFAULT_SIMILARITY_THRESHOLD,
     maxOptionsPerAnchor = 3,
     onProgress
   } = options;
@@ -434,7 +437,7 @@ export async function findAnchorMatches(
 export async function getMatchesForAnchor(
   anchorText: string,
   maxOptions: number = 5,
-  minSimilarity: number = 0.7
+  minSimilarity: number = DEFAULT_SIMILARITY_THRESHOLD
 ): Promise<MatchOption[]> {
   console.log(`\n🎯 Single anchor search: "${anchorText}"`);
   
