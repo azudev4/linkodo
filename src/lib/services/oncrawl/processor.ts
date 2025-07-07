@@ -403,27 +403,9 @@ async function batchRemoveStalePages(
 }
 
 /**
- * Update last_crawled timestamp for unchanged pages
- */
-async function batchTouchUnchangedPages(
-  pages: ProcessedOnCrawlPage[],
-  batchSize: number = 1000
-): Promise<void> {
-  for (let i = 0; i < pages.length; i += batchSize) {
-    const batch = pages.slice(i, i + batchSize);
-    const urls = batch.map(p => p.url);
-    
-    await supabase
-      .from('pages')
-      .update({ last_crawled: new Date().toISOString() })
-      .in('url', urls);
-  }
-}
-
-/**
  * 🚀 OPTIMIZED: Smart sync with proper categorization and safety checks
  */
-async function optimizedSmartSync(pages: ProcessedOnCrawlPage[]): Promise<{
+async function optimizedSmartSync(pages: ProcessedOnCrawlPage[], projectId: string, crawlId: string): Promise<{
   added: number; updated: number; unchanged: number; failed: number; removed: number;
 }> {
   console.log(`🧠 Starting OPTIMIZED smart sync for ${pages.length} pages...`);
@@ -494,8 +476,7 @@ async function optimizedSmartSync(pages: ProcessedOnCrawlPage[]): Promise<{
   }
 
   if (unchangedPages.length > 0) {
-    console.log(`⚪ Touching ${unchangedPages.length} unchanged pages (last_crawled only)...`);
-    await batchTouchUnchangedPages(unchangedPages);
+    console.log(`⚪ ${unchangedPages.length} unchanged pages (skipping update)...`);
   }
 
   if (staleUrls.length > 0) {
@@ -546,7 +527,7 @@ export async function syncPagesFromOnCrawlOptimized(
   // 3. OPTIMIZED database sync with sync history tracking
   console.log(`💾 Starting optimized database sync...`);
   const syncStartTime = Date.now();
-  const result = await optimizedSmartSync(indexablePages);
+  const result = await optimizedSmartSync(indexablePages, projectId, crawl.id);
   const syncDuration = Date.now() - syncStartTime;
   
   const overallDuration = Date.now() - overallStartTime;
