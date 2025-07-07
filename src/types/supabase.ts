@@ -24,7 +24,6 @@ export type Database = {
           id: string
           inrank_decimal: number | null
           internal_outlinks: number | null
-          last_crawled: string | null
           meta_description: string | null
           nb_inlinks: number | null
           title: string | null
@@ -41,7 +40,6 @@ export type Database = {
           id?: string
           inrank_decimal?: number | null
           internal_outlinks?: number | null
-          last_crawled?: string | null
           meta_description?: string | null
           nb_inlinks?: number | null
           title?: string | null
@@ -58,7 +56,6 @@ export type Database = {
           id?: string
           inrank_decimal?: number | null
           internal_outlinks?: number | null
-          last_crawled?: string | null
           meta_description?: string | null
           nb_inlinks?: number | null
           title?: string | null
