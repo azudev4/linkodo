@@ -1,4 +1,4 @@
-// src/lib/services/oncrawl/processor.ts - COMPLETE OPTIMIZED VERSION
+// src/lib/services/oncrawl/processor.ts - COMPLETE FIXED VERSION
 
 import { OnCrawlPage, OnCrawlClient } from './client';
 import { supabase } from '@/lib/db/client';
@@ -19,9 +19,19 @@ export interface ProcessedOnCrawlPage {
   nbInlinks: number | null;
 }
 
+export interface SyncResult {
+  added: number;
+  updated: number;
+  unchanged: number;
+  failed: number;
+  removed: number;
+  processed: number;
+  syncHistoryId: number;
+  durationMs: number;
+}
+
 /**
  * Convert string values to numbers (OnCrawl returns everything as strings)
- * FIXED: Use parseFloat() instead of parseInt() to preserve decimal values
  */
 function parseNumericField(value: string | null | undefined): number | null {
   if (!value || value === 'null' || value === '') return null;
@@ -35,7 +45,6 @@ function parseNumericField(value: string | null | undefined): number | null {
 export function determinePageCategory(url: string): string {
   const slashCount = (url.match(/\//g) || []).length;
   
-  // Both /tags/something and /something/ are treated as categories
   if (url.includes('/tags/') || (url.endsWith('/') && slashCount <= 4)) {
     return 'category';
   }
@@ -47,7 +56,6 @@ export function determinePageCategory(url: string): string {
 
 /**
  * Process OnCrawl page data to our standard format
- * Pure data transformation - no content generation
  */
 export function processOnCrawlPage(page: OnCrawlPage): ProcessedOnCrawlPage {
   const url = page.url;
@@ -55,14 +63,12 @@ export function processOnCrawlPage(page: OnCrawlPage): ProcessedOnCrawlPage {
   const h1 = page.h1;
   const metaDescription = page.meta_description;
 
-  // Parse numeric fields (OnCrawl sends everything as strings)
   const wordCount = parseNumericField(page.word_count);
   const depth = parseNumericField(page.depth);
   const inrankDecimal = parseNumericField(page.inrank_decimal);
   const internalOutlinks = parseNumericField(page.internal_outlinks);
   const nbInlinks = parseNumericField(page.nb_inlinks);
   
-  // Determine category based on URL structure
   const category = determinePageCategory(url);
   
   return {
@@ -80,32 +86,26 @@ export function processOnCrawlPage(page: OnCrawlPage): ProcessedOnCrawlPage {
 }
 
 /**
- * FIXED: Check if a page has actually changed compared to existing data
- * Normalize comparisons to handle null/0, null/"", and float precision issues
+ * Check if a page has actually changed compared to existing data
  */
 function hasPageChanged(existing: any, newPage: ProcessedOnCrawlPage): boolean {
-  // Helper function to normalize string values (null <-> empty string)
   const normalizeString = (value: any): string | null => {
     if (value === null || value === undefined || value === "") return null;
     return String(value).trim() || null;
   };
 
-  // Helper function to normalize numeric values (null <-> 0, precision issues)
   const normalizeNumber = (value: any): number | null => {
     if (value === null || value === undefined || value === "" || value === "null") return null;
     const num = parseFloat(value);
     if (isNaN(num)) return null;
-    // Round to 6 decimal places to handle floating point precision issues
     return Math.round(num * 1000000) / 1000000;
   };
 
-  // Normalize and compare each field
   const titleChanged = normalizeString(existing.title) !== normalizeString(newPage.title);
   const metaDescChanged = normalizeString(existing.meta_description) !== normalizeString(newPage.metaDescription);
   const h1Changed = normalizeString(existing.h1) !== normalizeString(newPage.h1);
   const categoryChanged = normalizeString(existing.category) !== normalizeString(newPage.category);
   
-  // Numeric field comparisons with normalization
   const wordCountChanged = normalizeNumber(existing.word_count) !== normalizeNumber(newPage.wordCount);
   const depthChanged = normalizeNumber(existing.depth) !== normalizeNumber(newPage.depth);
   const inrankChanged = normalizeNumber(existing.inrank_decimal) !== normalizeNumber(newPage.inrankDecimal);
@@ -117,13 +117,87 @@ function hasPageChanged(existing: any, newPage: ProcessedOnCrawlPage): boolean {
 }
 
 /**
- * 🚀 FIXED: Fetch ALL existing pages with explicit Supabase limits
+ * ✅ FIXED: Create sync history record (let DB auto-generate ID)
+ */
+async function createSyncHistoryRecord(
+  projectId: string,
+  projectName: string,
+  crawlId: string,
+  crawlName: string | null
+): Promise<number> {
+  console.log(`📝 Creating sync history record for project "${projectName}"...`);
+  
+  const { data, error } = await supabase
+    .from('sync_history')
+    .insert({
+      project_id: projectId,
+      project_name: projectName,
+      crawl_id: crawlId,
+      crawl_name: crawlName || 'Unnamed crawl',
+      synced_at: new Date().toISOString(),
+      // Initialize all counters to 0 - will be updated at the end
+      pages_added: 0,
+      pages_updated: 0,
+      pages_unchanged: 0,
+      pages_removed: 0,
+      pages_failed: 0,
+      duration_ms: 0
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    console.error(`❌ Failed to create sync history record:`, error);
+    throw new Error(`Failed to create sync history record: ${error.message}`);
+  }
+
+  console.log(`📝 ✅ Created sync history record with ID: ${data.id}`);
+  return data.id;
+}
+
+/**
+ * ✅ FIXED: Update sync history record with final results
+ */
+async function updateSyncHistoryRecord(
+  syncHistoryId: number,
+  result: { added: number; updated: number; unchanged: number; removed: number; failed: number },
+  durationMs: number
+): Promise<void> {
+  console.log(`📝 Updating sync history record ${syncHistoryId} with final results...`);
+  
+  const { error } = await supabase
+    .from('sync_history')
+    .update({
+      pages_added: result.added,
+      pages_updated: result.updated,
+      pages_unchanged: result.unchanged,
+      pages_removed: result.removed,
+      pages_failed: result.failed,
+      duration_ms: durationMs
+    })
+    .eq('id', syncHistoryId);
+
+  if (error) {
+    console.error(`❌ Failed to update sync history record:`, error);
+    // Don't throw - sync succeeded, just logging failed
+  } else {
+    console.log(`📝 ✅ Successfully updated sync history record ${syncHistoryId} with results:
+      ✨ ${result.added} added
+      🔄 ${result.updated} updated
+      ⚪ ${result.unchanged} unchanged
+      🗑️  ${result.removed} removed
+      ❌ ${result.failed} failed
+      ⏱️  ${durationMs}ms duration`);
+  }
+}
+
+/**
+ * Fetch existing pages for comparison
  */
 async function optimizedFetchExistingPages(): Promise<Map<string, any>> {
   console.log(`🔍 Fetching ALL existing pages...`);
   const startTime = Date.now();
   
-  // First, get the total count
   const { count, error: countError } = await supabase
     .from('pages')
     .select('*', { count: 'exact', head: true });
@@ -136,7 +210,7 @@ async function optimizedFetchExistingPages(): Promise<Map<string, any>> {
   console.log(`📊 Database contains ${count} total pages`);
   
   const allPages: any[] = [];
-  const batchSize = 1000; // Supabase safe batch size
+  const batchSize = 1000;
   const totalPages = count || 0;
   
   for (let offset = 0; offset < totalPages; offset += batchSize) {
@@ -144,9 +218,9 @@ async function optimizedFetchExistingPages(): Promise<Map<string, any>> {
     
     const { data: batch, error } = await supabase
       .from('pages')
-      .select('url, title, meta_description, h1, word_count, category, depth, inrank_decimal, internal_outlinks, nb_inlinks, embedding, last_crawled')
+      .select('url, title, meta_description, h1, word_count, category, depth, inrank_decimal, internal_outlinks, nb_inlinks, embedding')
       .range(offset, batchEnd)
-      .limit(batchSize); // Explicit limit to override Supabase defaults
+      .limit(batchSize);
     
     if (error) {
       console.error(`❌ Error fetching batch ${offset}-${batchEnd}:`, error);
@@ -159,14 +233,8 @@ async function optimizedFetchExistingPages(): Promise<Map<string, any>> {
       const totalBatches = Math.ceil(totalPages / batchSize);
       console.log(`🔍 Fetched batch ${batchNum}/${totalBatches}: ${batch.length} pages (total: ${allPages.length}/${totalPages})`);
     }
-    
-    // Safety check
-    if (batch && batch.length < batchSize && offset + batchSize < totalPages) {
-      console.warn(`⚠️ Got fewer pages than expected in batch. Expected ${batchSize}, got ${batch.length}`);
-    }
   }
   
-  // Convert to Map for O(1) lookups
   const pageMap = new Map();
   allPages.forEach(page => {
     pageMap.set(page.url, page);
@@ -175,43 +243,33 @@ async function optimizedFetchExistingPages(): Promise<Map<string, any>> {
   const duration = Date.now() - startTime;
   console.log(`🔍 Successfully fetched ${pageMap.size}/${totalPages} existing pages in ${duration}ms`);
   
-  // Verify we got everything
-  if (pageMap.size !== totalPages) {
-    console.warn(`⚠️ WARNING: Expected ${totalPages} pages but got ${pageMap.size}. Some pages may be missing!`);
-  }
-  
   return pageMap;
 }
 
 /**
- * 🚀 OPTIMIZED: Fast filtering with pre-compiled patterns and minimal URL parsing
+ * OPTIMIZED filtering with pre-compiled patterns
  */
 function optimizedFilterPages(pages: OnCrawlPage[]): ProcessedOnCrawlPage[] {
   console.log(`🔍 Starting OPTIMIZED filtering of ${pages.length} pages...`);
   const startTime = Date.now();
   
-  // Pre-compile exclusion patterns for faster matching
   const excludedPhrasesSet = new Set(EXCLUDED_URL_PHRASES.map(p => p.toLowerCase()));
   const sitePatternSet = new Set(SITE_SPECIFIC_EXCLUDED_PATTERNS);
   
-  // Fast exclusion check without expensive URL parsing
   const shouldExcludeFast = (url: string, metaDescription?: string): boolean => {
     if (!url || url.length < 8) return true;
     
-    // Quick malformed URL detection (OnCrawl data quality issues)
     if (url.includes('\n') || url.includes('\r') || url.includes(';200;') || !url.startsWith('http')) {
       return true;
     }
     
     const lowerUrl = url.toLowerCase();
     
-    // Fast phrase checking using Set lookup O(1) instead of array.some() O(n)
     for (const phrase of excludedPhrasesSet) {
       if (lowerUrl.includes(phrase)) return true;
     }
     
-    // Fast site pattern checking - extract pathname without full URL parsing
-    const pathStart = url.indexOf('/', 8); // After "https://"
+    const pathStart = url.indexOf('/', 8);
     if (pathStart !== -1) {
       const pathname = url.substring(pathStart).toLowerCase();
       for (const pattern of sitePatternSet) {
@@ -219,7 +277,6 @@ function optimizedFilterPages(pages: OnCrawlPage[]): ProcessedOnCrawlPage[] {
       }
     }
     
-    // Forum content check only if meta description exists (avoid unnecessary work)
     if (metaDescription && isForumContent(metaDescription)) return true;
     
     return false;
@@ -231,35 +288,32 @@ function optimizedFilterPages(pages: OnCrawlPage[]): ProcessedOnCrawlPage[] {
   for (const page of pages) {
     const url = page.url;
     
-    // Fast exclusion check first (avoid expensive operations)
     if (shouldExcludeFast(url, page.meta_description ?? undefined)) {
       excluded++;
       continue;
     }
     
-    // Status code check
     const statusCode = page.status_code ? parseInt(page.status_code) : null;
     if (statusCode && statusCode !== 200) {
       excluded++;
       continue;
     }
     
-    // Process page (this is fast)
     indexablePages.push(processOnCrawlPage(page));
   }
   
   const duration = Date.now() - startTime;
-  console.log(`🔍 Optimized filtering completed in ${duration}ms: kept ${indexablePages.length}, excluded ${excluded}`);
+  console.log(`🔍 Optimized filtering completed: ${indexablePages.length} kept, ${excluded} excluded in ${duration}ms`);
   
   return indexablePages;
 }
 
 /**
- * Batch insert completely new pages with Supabase batch size limits
+ * ✅ FIXED: Batch insert new pages WITHOUT last_crawled or sync_history_id
  */
 async function batchInsertNewPages(
   pages: ProcessedOnCrawlPage[],
-  batchSize: number = 1000 // Supabase recommended batch size
+  batchSize: number = 1000
 ): Promise<{ processed: number; failed: number }> {
   let processed = 0;
   let failed = 0;
@@ -279,9 +333,9 @@ async function batchInsertNewPages(
         inrank_decimal: page.inrankDecimal,
         internal_outlinks: page.internalOutlinks,
         nb_inlinks: page.nbInlinks,
-        embedding: null, // New pages start with no embedding
-        last_crawled: new Date().toISOString(),
+        embedding: null,
         updated_at: new Date().toISOString()
+        // ✅ No last_crawled, no sync_history_id
       }));
 
       const { error } = await supabase
@@ -306,12 +360,12 @@ async function batchInsertNewPages(
 }
 
 /**
- * Batch update only pages that actually changed (preserve embeddings)
+ * ✅ FIXED: Batch update changed pages WITHOUT last_crawled or sync_history_id
  */
 async function batchUpdateChangedPages(
   pages: ProcessedOnCrawlPage[],
   existingPageMap: Map<string, any>,
-  batchSize: number = 500 // Smaller batch size for updates
+  batchSize: number = 500
 ): Promise<{ processed: number; failed: number }> {
   let processed = 0;
   let failed = 0;
@@ -335,8 +389,8 @@ async function batchUpdateChangedPages(
           internal_outlinks: page.internalOutlinks,
           nb_inlinks: page.nbInlinks,
           embedding: existing?.embedding || null, // ✅ Preserve existing embedding
-          last_crawled: new Date().toISOString(),
           updated_at: new Date().toISOString()
+          // ✅ No last_crawled, no sync_history_id
         };
       });
 
@@ -368,7 +422,7 @@ async function batchUpdateChangedPages(
  */
 async function batchRemoveStalePages(
   staleUrls: string[],
-  batchSize: number = 200 // Smaller batch size to avoid 414 Request-URI Too Large errors
+  batchSize: number = 200
 ): Promise<{ removed: number; failed: number }> {
   let removed = 0;
   let failed = 0;
@@ -403,27 +457,29 @@ async function batchRemoveStalePages(
 }
 
 /**
- * 🚀 OPTIMIZED: Smart sync with proper categorization and safety checks
+ * ✅ FIXED: Smart sync with standalone sync history tracking
  */
-async function optimizedSmartSync(pages: ProcessedOnCrawlPage[], projectId: string, crawlId: string): Promise<{
+async function optimizedSmartSync(
+  pages: ProcessedOnCrawlPage[], 
+  syncHistoryId: number
+): Promise<{
   added: number; updated: number; unchanged: number; failed: number; removed: number;
 }> {
-  console.log(`🧠 Starting OPTIMIZED smart sync for ${pages.length} pages...`);
+  console.log(`🧠 Starting OPTIMIZED smart sync for ${pages.length} pages (sync history: ${syncHistoryId})...`);
   const startTime = Date.now();
   
-  // 1. Fetch ALL existing pages with proper pagination
+  // 1. Fetch ALL existing pages
   const existingPageMap = await optimizedFetchExistingPages();
   const allExistingUrls = new Set(existingPageMap.keys());
   
   console.log(`📊 Database state: ${existingPageMap.size} existing pages, processing ${pages.length} OnCrawl pages`);
   
-  // 2. Fast categorization using Map lookups O(1)
+  // 2. Categorize pages
   const currentUrls = new Set(pages.map(p => p.url));
   const newPages: ProcessedOnCrawlPage[] = [];
   const changedPages: ProcessedOnCrawlPage[] = [];
   const unchangedPages: ProcessedOnCrawlPage[] = [];
   
-  // Debug: Track a few examples for verification
   let exampleNew = '';
   let exampleChanged = '';
   let exampleUnchanged = '';
@@ -443,54 +499,50 @@ async function optimizedSmartSync(pages: ProcessedOnCrawlPage[], projectId: stri
     }
   }
   
-  // 3. Find stale pages (in DB but not in current OnCrawl)
+  // 3. Find stale pages
   const staleUrls = Array.from(allExistingUrls).filter(url => !currentUrls.has(url));
   
-  console.log(`📊 FIXED categorization:
+  console.log(`📊 Categorization (sync history: ${syncHistoryId}):
     ✨ ${newPages.length} new pages ${exampleNew ? `(e.g., ${exampleNew.substring(0, 60)}...)` : ''}
     🔄 ${changedPages.length} changed pages ${exampleChanged ? `(e.g., ${exampleChanged.substring(0, 60)}...)` : ''}
     ⚪ ${unchangedPages.length} unchanged pages ${exampleUnchanged ? `(e.g., ${exampleUnchanged.substring(0, 60)}...)` : ''}
     🗑️  ${staleUrls.length} stale pages
   `);
 
-  // Safety check: If we have way more "new" pages than expected, something is wrong
-  if (newPages.length > pages.length * 0.5) {
-    console.warn(`⚠️ WARNING: ${newPages.length} new pages seems high (${Math.round(newPages.length/pages.length*100)}% of total). Verify database fetch worked correctly.`);
-  }
-
   let added = 0, updated = 0, unchanged = unchangedPages.length, failed = 0, removed = 0;
 
-  // 4. Execute operations with error handling
+  // 4. Execute operations - ONLY touch pages that need changes
   if (newPages.length > 0) {
-    console.log(`📥 Inserting ${newPages.length} genuinely new pages...`);
+    console.log(`📥 Inserting ${newPages.length} new pages (sync ${syncHistoryId})...`);
     const insertResult = await batchInsertNewPages(newPages);
     added = insertResult.processed;
     failed += insertResult.failed;
   }
 
   if (changedPages.length > 0) {
-    console.log(`🔄 Updating ${changedPages.length} changed pages...`);
+    console.log(`🔄 Updating ${changedPages.length} changed pages (sync ${syncHistoryId})...`);
     const updateResult = await batchUpdateChangedPages(changedPages, existingPageMap);
     updated = updateResult.processed;
     failed += updateResult.failed;
   }
 
+  // ✅ FIXED: Don't touch unchanged pages at all!
   if (unchangedPages.length > 0) {
-    console.log(`⚪ ${unchangedPages.length} unchanged pages (skipping update)...`);
+    console.log(`⚪ ${unchangedPages.length} unchanged pages (SKIPPED - no database writes needed!)`);
   }
 
   if (staleUrls.length > 0) {
-    console.log(`🗑️  Removing ${staleUrls.length} stale pages...`);
+    console.log(`🗑️  Removing ${staleUrls.length} stale pages (sync ${syncHistoryId})...`);
     const removeResult = await batchRemoveStalePages(staleUrls);
     removed = removeResult.removed;
     failed += removeResult.failed;
   }
 
   const duration = Date.now() - startTime;
-  console.log(`✅ Fixed sync completed in ${duration}ms:
+  console.log(`✅ Smart sync completed in ${duration}ms (sync history: ${syncHistoryId}):
     ✨ ${added} added
     🔄 ${updated} updated  
-    ⚪ ${unchanged} unchanged
+    ⚪ ${unchanged} unchanged (NOT TOUCHED!)
     🗑️  ${removed} removed (stale)
     ❌ ${failed} failed
   `);
@@ -499,15 +551,30 @@ async function optimizedSmartSync(pages: ProcessedOnCrawlPage[], projectId: stri
 }
 
 /**
- * 🚀 MAIN OPTIMIZED SYNC FUNCTION - Now with sync history tracking instead of touching pages
+ * Get project name from OnCrawl API or use fallback
+ */
+async function getProjectName(projectId: string): Promise<string> {
+  try {
+    const client = new OnCrawlClient(process.env.ONCRAWL_API_TOKEN!);
+    const projects = await client.getProjects();
+    const project = projects.find(p => p.id === projectId);
+    return project?.name || `Project ${projectId}`;
+  } catch (error) {
+    console.warn(`⚠️  Could not fetch project name, using fallback`);
+    return `Project ${projectId}`;
+  }
+}
+
+/**
+ * ✅ MAIN FIXED SYNC FUNCTION - With proper standalone sync history tracking
  */
 export async function syncPagesFromOnCrawlOptimized(
   projectId: string,
   onProgress?: (processed: number, total: number) => void
-): Promise<{ processed: number; failed: number; added: number; updated: number; unchanged: number; removed: number }> {
+): Promise<SyncResult> {
   const client = new OnCrawlClient(process.env.ONCRAWL_API_TOKEN!);
   
-  console.log(`🚀 Starting OPTIMIZED sync from OnCrawl project: ${projectId}`);
+  console.log(`🚀 Starting OPTIMIZED sync with standalone sync history for project: ${projectId}`);
   const overallStartTime = Date.now();
   
   // 1. Fetch raw data from OnCrawl
@@ -515,60 +582,81 @@ export async function syncPagesFromOnCrawlOptimized(
   const fetchStartTime = Date.now();
   const { crawl, pages } = await client.getLatestAccessibleCrawlData(projectId);
   const fetchDuration = Date.now() - fetchStartTime;
-  console.log(`📡 Fetched ${pages.length} pages from OnCrawl crawl: ${crawl.id} (${crawl.name || 'Unnamed crawl'}) in ${fetchDuration}ms`);
   
-  // 2. OPTIMIZED filtering and processing
-  console.log(`🔍 Starting optimized filtering...`);
-  const filterStartTime = Date.now();
-  const indexablePages = optimizedFilterPages(pages);
-  const filterDuration = Date.now() - filterStartTime;
-  console.log(`🔍 OPTIMIZED filtering completed: ${indexablePages.length} kept, ${pages.length - indexablePages.length} excluded in ${filterDuration}ms`);
+  // Get project name for sync history
+  const projectName = await getProjectName(projectId);
   
-  // 3. OPTIMIZED database sync with sync history tracking
-  console.log(`💾 Starting optimized database sync...`);
-  const syncStartTime = Date.now();
-  const result = await optimizedSmartSync(indexablePages, projectId, crawl.id);
-  const syncDuration = Date.now() - syncStartTime;
+  console.log(`📡 Fetched ${pages.length} pages from crawl: ${crawl.id} (${crawl.name || 'Unnamed crawl'}) in ${fetchDuration}ms`);
   
-  const overallDuration = Date.now() - overallStartTime;
-  const pagesPerSecond = overallDuration > 0 ? Math.round((result.added + result.updated + result.unchanged) / (overallDuration / 1000)) : 0;
+  // ✅ 2. CREATE SYNC HISTORY RECORD
+  const syncHistoryId = await createSyncHistoryRecord(
+    projectId,
+    projectName,
+    crawl.id,
+    crawl.name
+  );
   
-  console.log(`🎉 OPTIMIZED sync completed in ${overallDuration}ms total:
-    📡 OnCrawl fetch: ${fetchDuration}ms
-    🔍 Filtering: ${filterDuration}ms (OPTIMIZED)
-    💾 Database sync: ${syncDuration}ms (OPTIMIZED - no unnecessary page touching)
-    ✨ ${result.added} added
-    🔄 ${result.updated} updated
-    ⚪ ${result.unchanged} unchanged
-    🗑️  ${result.removed} removed (stale)
-    ❌ ${result.failed} failed
-    🚀 Performance: ${pagesPerSecond} pages/second (OPTIMIZED)
-  `);
-  
-  // Report final progress
-  if (onProgress) {
-    onProgress(result.added + result.updated + result.unchanged, indexablePages.length);
+  try {
+    // 3. OPTIMIZED filtering and processing
+    console.log(`🔍 Starting optimized filtering...`);
+    const filterStartTime = Date.now();
+    const indexablePages = optimizedFilterPages(pages);
+    const filterDuration = Date.now() - filterStartTime;
+    console.log(`🔍 OPTIMIZED filtering completed: ${indexablePages.length} kept, ${pages.length - indexablePages.length} excluded in ${filterDuration}ms`);
+    
+    // 4. OPTIMIZED database sync with standalone sync history
+    console.log(`💾 Starting optimized database sync with sync history ${syncHistoryId}...`);
+    const syncStartTime = Date.now();
+    const result = await optimizedSmartSync(indexablePages, syncHistoryId);
+    const syncDuration = Date.now() - syncStartTime;
+    
+    const overallDuration = Date.now() - overallStartTime;
+    const pagesPerSecond = overallDuration > 0 ? Math.round((result.added + result.updated + result.unchanged) / (overallDuration / 1000)) : 0;
+    
+    // ✅ 5. UPDATE SYNC HISTORY WITH FINAL RESULTS
+    await updateSyncHistoryRecord(syncHistoryId, result, overallDuration);
+    
+    console.log(`🎉 OPTIMIZED sync with standalone sync history completed in ${overallDuration}ms:
+      📝 Sync History ID: ${syncHistoryId} ✅
+      📡 OnCrawl fetch: ${fetchDuration}ms
+      🔍 Filtering: ${filterDuration}ms (OPTIMIZED)
+      💾 Database sync: ${syncDuration}ms (OPTIMIZED - no unnecessary page touching!)
+      ✨ ${result.added} added
+      🔄 ${result.updated} updated
+      ⚪ ${result.unchanged} unchanged (not touched!)
+      🗑️  ${result.removed} removed (stale)
+      ❌ ${result.failed} failed
+      🚀 Performance: ${pagesPerSecond} pages/second (OPTIMIZED)
+    `);
+    
+    // Report final progress
+    if (onProgress) {
+      onProgress(result.added + result.updated + result.unchanged, indexablePages.length);
+    }
+    
+    return { 
+      processed: result.added + result.updated + result.unchanged + result.failed + result.removed,
+      added: result.added,
+      updated: result.updated,
+      unchanged: result.unchanged,
+      failed: result.failed,
+      removed: result.removed,
+      syncHistoryId,
+      durationMs: overallDuration
+    };
+    
+  } catch (error) {
+    // If sync fails, still try to update sync history with error info
+    const overallDuration = Date.now() - overallStartTime;
+    await updateSyncHistoryRecord(syncHistoryId, {
+      added: 0,
+      updated: 0,
+      unchanged: 0,
+      removed: 0,
+      failed: pages.length
+    }, overallDuration);
+    
+    console.error(`❌ Sync failed, updated sync history ${syncHistoryId} with error info`);
+    throw error; // Re-throw the original error
   }
-  
-  return { 
-    processed: result.added + result.updated + result.unchanged, 
-    failed: result.failed,
-    added: result.added,
-    updated: result.updated,
-    unchanged: result.unchanged,
-    removed: result.removed
-  };
-}
-
-// Keep legacy function for backwards compatibility (but mark as deprecated)
-/**
- * @deprecated Use syncPagesFromOnCrawlOptimized instead for proper change detection and performance
- */
-export async function syncPagesFromOnCrawl(
-  projectId: string,
-  onProgress?: (processed: number, total: number) => void
-): Promise<{ processed: number; failed: number }> {
-  console.warn('⚠️  Using deprecated syncPagesFromOnCrawl. Use syncPagesFromOnCrawlOptimized for better performance!');
-  const result = await syncPagesFromOnCrawlOptimized(projectId, onProgress);
-  return { processed: result.processed, failed: result.failed };
 }
