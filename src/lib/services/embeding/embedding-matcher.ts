@@ -1,7 +1,9 @@
+// src/lib/services/embedding/embedding-matcher.ts - CORRECTED VERSION
 import OpenAI from 'openai';
-import { findSimilarPages, SimilarPage, supabase } from '@/lib/db/client';
+import { supabase } from '@/lib/db/client';
 import { AnchorCandidate } from '../text-processor';
-import { PageData } from '@/lib/db/client';
+import { embeddingFromString } from './embeddings';
+
 // Initialize OpenAI
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
@@ -10,7 +12,7 @@ export interface MatchOption {
   title: string;
   url: string;
   description: string;
-  matchedSection: string; // 'H1', 'H2', 'H3', 'Keywords'
+  matchedSection: string; // 'H1', 'Title', 'Meta', 'Semantic'
   matchedContent: string; // The actual content that matched
   relevanceScore: number;
 }
@@ -27,12 +29,15 @@ export interface MatchingResult {
   averageScore: number;
 }
 
-export interface SuggestionMatch {
-  page: PageData;
-  score: number;
-  matchedSection: string; // 'H1', 'H2', 'H3', 'Keywords'
-  matchedContent: string;
-  reason: string;
+// CORRECTED: Use actual database schema
+interface PageWithEmbedding {
+  id: string;
+  url: string;
+  title: string | null;
+  meta_description: string | null;
+  h1: string | null;
+  embedding: string; // JSON string in database
+  similarity: number; // Added by similarity function
 }
 
 /**
@@ -53,62 +58,42 @@ async function generateCandidateEmbedding(candidateText: string): Promise<number
 }
 
 /**
- * Determine which section of a page caused the match
+ * CORRECTED: Determine which section of a page caused the match using real fields
  */
 function determineMatchedSection(
   candidateText: string, 
-  page: SimilarPage
+  page: PageWithEmbedding
 ): { section: string; content: string } {
   const candidate = candidateText.toLowerCase();
+  
+  // Check title match
+  if (page.title && page.title.toLowerCase().includes(candidate)) {
+    return { section: 'Title', content: page.title };
+  }
   
   // Check H1 match
   if (page.h1 && page.h1.toLowerCase().includes(candidate)) {
     return { section: 'H1', content: page.h1 };
   }
   
-  // Check H2 matches
-  if (page.h2_tags) {
-    for (const h2 of page.h2_tags) {
-      if (h2.toLowerCase().includes(candidate)) {
-        return { section: 'H2', content: h2 };
-      }
-    }
+  // Check meta description match
+  if (page.meta_description && page.meta_description.toLowerCase().includes(candidate)) {
+    return { section: 'Meta', content: page.meta_description };
   }
   
-  // Check H3 matches
-  if (page.h3_tags) {
-    for (const h3 of page.h3_tags) {
-      if (h3.toLowerCase().includes(candidate)) {
-        return { section: 'H3', content: h3 };
-      }
-    }
-  }
-  
-
-  
-  // Check primary keywords
-  if (page.primary_keywords) {
-    for (const keyword of page.primary_keywords) {
-      if (keyword.toLowerCase().includes(candidate) || candidate.includes(keyword.toLowerCase())) {
-        return { section: 'Keywords', content: keyword };
-      }
-    }
-  }
-  
-  // If no direct match found, it's likely semantic similarity
-  // Use the title or H1 as the matched content
+  // If no direct match found, it's semantic similarity
   return { 
     section: 'Semantic', 
-    content: page.h1 || page.title || 'Content similarity' 
+    content: page.h1 || page.title || 'Content similarity detected'
   };
 }
 
 /**
- * Create match options from similar pages
+ * CORRECTED: Create match options from similar pages using real schema
  */
 function createMatchOptions(
   candidateText: string,
-  similarPages: SimilarPage[]
+  similarPages: PageWithEmbedding[]
 ): MatchOption[] {
   return similarPages.map(page => {
     const match = determineMatchedSection(candidateText, page);
@@ -126,6 +111,46 @@ function createMatchOptions(
 }
 
 /**
+ * CORRECTED: Find similar pages using Supabase vector similarity with real schema
+ */
+async function findSimilarPages(
+  embedding: number[],
+  minSimilarity: number = 0.7,
+  maxResults: number = 3
+): Promise<PageWithEmbedding[]> {
+  try {
+    // Convert embedding to string format for Supabase function
+    const embeddingStr = JSON.stringify(embedding);
+    
+    const { data, error } = await supabase.rpc('find_similar_pages', {
+      query_embedding: embeddingStr,
+      similarity_threshold: minSimilarity,
+      match_limit: maxResults
+    });
+
+    if (error) {
+      console.error('Similarity search error:', error);
+      throw error;
+    }
+
+    // CORRECTED: Map to our interface with real schema
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      url: row.url,
+      title: row.title,
+      meta_description: row.meta_description,
+      h1: row.h1,
+      embedding: row.embedding || '[]', // Handle null embeddings
+      similarity: row.similarity
+    }));
+
+  } catch (error) {
+    console.error('Failed to find similar pages:', error);
+    return [];
+  }
+}
+
+/**
  * Find matching pages for a single anchor candidate
  */
 async function findCandidateMatches(
@@ -137,15 +162,15 @@ async function findCandidateMatches(
     // Generate embedding for the candidate
     const embedding = await generateCandidateEmbedding(candidate.text);
     
-    // Find similar pages using our Supabase function
+    // Find similar pages using corrected function
     const similarPages = await findSimilarPages(embedding, minSimilarity, maxOptions);
     
-    // Create match options
+    // Create match options using corrected schema
     const options = createMatchOptions(candidate.text, similarPages);
     
     return {
       anchor: candidate,
-      options: options.slice(0, maxOptions) // Ensure we don't exceed max options
+      options: options.slice(0, maxOptions)
     };
     
   } catch (error) {
@@ -180,7 +205,9 @@ export async function findAnchorMatches(
   let totalMatches = 0;
   let totalScore = 0;
   
-  // Process candidates with rate limiting to avoid API limits
+  console.log(`🔍 Finding matches for ${candidates.length} anchor candidates...`);
+  
+  // Process candidates with rate limiting
   for (let i = 0; i < candidates.length; i++) {
     const candidate = candidates[i];
     
@@ -199,6 +226,10 @@ export async function findAnchorMatches(
         // Calculate average score for this anchor's options
         const anchorScore = anchorMatch.options.reduce((sum, opt) => sum + opt.relevanceScore, 0);
         totalScore += anchorScore;
+        
+        console.log(`✓ Found ${anchorMatch.options.length} matches for "${candidate.text}"`);
+      } else {
+        console.log(`○ No matches found for "${candidate.text}"`);
       }
       
       // Report progress if callback provided
@@ -206,7 +237,7 @@ export async function findAnchorMatches(
         onProgress(i + 1, candidates.length);
       }
       
-      // Rate limiting: wait 100ms between requests to avoid overwhelming APIs
+      // Rate limiting: wait 100ms between requests
       if (i < candidates.length - 1) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
@@ -217,36 +248,15 @@ export async function findAnchorMatches(
     }
   }
   
+  const averageScore = totalMatches > 0 ? Math.round(totalScore / totalMatches * 100) / 100 : 0;
+  
+  console.log(`🎉 Matching completed: ${matches.length} anchors with matches, ${totalMatches} total options, avg score: ${averageScore}`);
+  
   return {
     matches,
     totalCandidates: candidates.length,
     totalMatches,
-    averageScore: totalMatches > 0 ? Math.round(totalScore / totalMatches * 100) / 100 : 0
-  };
-}
-
-/**
- * Filter matches by minimum score threshold
- */
-export function filterMatchesByScore(
-  result: MatchingResult, 
-  minScore: number = 0.8
-): MatchingResult {
-  const filteredMatches = result.matches.map(match => ({
-    ...match,
-    options: match.options.filter(option => option.relevanceScore >= minScore)
-  })).filter(match => match.options.length > 0);
-  
-  const totalMatches = filteredMatches.reduce((sum, match) => sum + match.options.length, 0);
-  const totalScore = filteredMatches.reduce((sum, match) => 
-    sum + match.options.reduce((optSum, opt) => optSum + opt.relevanceScore, 0), 0
-  );
-  
-  return {
-    matches: filteredMatches,
-    totalCandidates: result.totalCandidates,
-    totalMatches,
-    averageScore: totalMatches > 0 ? Math.round(totalScore / totalMatches * 100) / 100 : 0
+    averageScore
   };
 }
 
@@ -279,74 +289,66 @@ export async function getMatchesForAnchor(
 }
 
 /**
- * Batch process multiple anchor texts (useful for testing)
+ * Check database embedding compatibility
  */
-export async function batchProcessAnchors(
-  anchorTexts: string[],
-  maxOptionsPerAnchor: number = 3
-): Promise<{ [anchorText: string]: MatchOption[] }> {
-  const result: { [anchorText: string]: MatchOption[] } = {};
-  
-  for (const anchorText of anchorTexts) {
-    try {
-      result[anchorText] = await getMatchesForAnchor(anchorText, maxOptionsPerAnchor);
-      
-      // Rate limiting
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-    } catch (error) {
-      console.error(`Failed to process anchor "${anchorText}":`, error);
-      result[anchorText] = [];
-    }
-  }
-  
-  return result;
-}
+export async function checkEmbeddingCompatibility(): Promise<{
+  totalPages: number;
+  pagesWithEmbeddings: number;
+  compatibilityIssues: string[];
+}> {
+  try {
+    // Check total pages
+    const { count: totalPages, error: countError } = await supabase
+      .from('pages')
+      .select('*', { count: 'exact', head: true });
 
-function findBestMatch(page: PageData, candidates: string[]): { section: string; content: string } | null {
-  // Priority order: H1 > H2 > H3 > Keywords
-  
-  // Check H1 match
-  if (page.h1) {
-    for (const candidate of candidates) {
-      if (page.h1.toLowerCase().includes(candidate)) {
-        return { section: 'H1', content: page.h1 };
-      }
-    }
-  }
+    if (countError) throw countError;
 
-  // Check H2 matches
-  if (page.h2_tags) {
-    for (const h2 of page.h2_tags) {
-      for (const candidate of candidates) {
-        if (h2.toLowerCase().includes(candidate)) {
-          return { section: 'H2', content: h2 };
+    // Check pages with embeddings
+    const { count: pagesWithEmbeddings, error: embeddingError } = await supabase
+      .from('pages')
+      .select('*', { count: 'exact', head: true })
+      .not('embedding', 'is', null);
+
+    if (embeddingError) throw embeddingError;
+
+    // Check for invalid embeddings
+    const { data: sampleEmbeddings, error: sampleError } = await supabase
+      .from('pages')
+      .select('id, embedding')
+      .not('embedding', 'is', null)
+      .limit(5);
+
+    const issues: string[] = [];
+    
+    if (sampleError) {
+      issues.push(`Failed to sample embeddings: ${sampleError.message}`);
+    } else if (sampleEmbeddings) {
+      for (const page of sampleEmbeddings) {
+        try {
+          if (page.embedding) {
+            const parsed = embeddingFromString(page.embedding);
+            if (!Array.isArray(parsed) || parsed.length === 0) {
+              issues.push(`Page ${page.id} has invalid embedding format`);
+            }
+          }
+        } catch (error) {
+          issues.push(`Page ${page.id} has unparseable embedding`);
         }
       }
     }
-  }
 
-  // Check H3 matches
-  if (page.h3_tags) {
-    for (const h3 of page.h3_tags) {
-      for (const candidate of candidates) {
-        if (h3.toLowerCase().includes(candidate)) {
-          return { section: 'H3', content: h3 };
-        }
-      }
-    }
-  }
+    return {
+      totalPages: totalPages || 0,
+      pagesWithEmbeddings: pagesWithEmbeddings || 0,
+      compatibilityIssues: issues
+    };
 
-  // Check keyword matches
-  if (page.primary_keywords) {
-    for (const keyword of page.primary_keywords) {
-      for (const candidate of candidates) {
-        if (keyword.toLowerCase().includes(candidate)) {
-          return { section: 'Keywords', content: keyword };
-        }
-      }
-    }
+  } catch (error) {
+    return {
+      totalPages: 0,
+      pagesWithEmbeddings: 0,
+      compatibilityIssues: [`Database check failed: ${error}`]
+    };
   }
-
-  return null;
 }

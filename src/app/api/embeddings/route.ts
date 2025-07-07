@@ -1,12 +1,12 @@
-// src/app/api/embeddings/route.ts
+// src/app/api/embeddings/route.ts (or fix your existing embeding/route.ts typo)
 import { NextResponse } from 'next/server';
-import { batchGenerateEmbeddings } from '@/lib/services/embeding/embeddings';
+import { generateEmbeddingsOptimized } from '@/lib/services/embeding/embeddings';
 
 export async function POST() {
   try {
-    console.log('Starting batch embedding generation...');
+    console.log('Starting optimized embedding generation...');
     
-    const result = await batchGenerateEmbeddings();
+    const result = await generateEmbeddingsOptimized();
     
     return NextResponse.json({
       success: true,
