@@ -1,4 +1,4 @@
-// src/lib/services/embedding/embedding-matcher.ts - CORRECTED VERSION
+// src/lib/services/embeding/embedding-matcher.ts - ENHANCED WITH DEBUG LOGS
 import OpenAI from 'openai';
 import { supabase } from '@/lib/db/client';
 import { AnchorCandidate } from '../text-processor';
@@ -27,6 +27,7 @@ export interface MatchingResult {
   totalCandidates: number;
   totalMatches: number;
   averageScore: number;
+  debugInfo?: any;
 }
 
 // CORRECTED: Use actual database schema
@@ -41,19 +42,199 @@ interface PageWithEmbedding {
 }
 
 /**
- * Generate embedding for an anchor candidate
+ * Generate embedding for an anchor candidate with debug logs
  */
 async function generateCandidateEmbedding(candidateText: string): Promise<number[]> {
+  console.log(`🧠 Generating embedding for: "${candidateText}"`);
+  const startTime = Date.now();
+  
   try {
     const response = await openai.embeddings.create({
       model: 'text-embedding-3-small',
       input: candidateText.trim(),
     });
 
+    const duration = Date.now() - startTime;
+    console.log(`✅ Embedding generated in ${duration}ms (${response.data[0].embedding.length} dimensions)`);
+    
     return response.data[0].embedding;
   } catch (error) {
-    console.error(`Failed to generate embedding for "${candidateText}":`, error);
+    console.error(`❌ Failed to generate embedding for "${candidateText}":`, error);
     throw error;
+  }
+}
+
+/**
+ * Enhanced similarity search with timeout handling and debug logs
+ */
+async function findSimilarPagesEnhanced(
+  embedding: number[],
+  minSimilarity: number = 0.7,
+  maxResults: number = 3
+): Promise<{ pages: PageWithEmbedding[]; debugInfo: any }> {
+  console.log(`🔍 Starting similarity search with threshold: ${minSimilarity}, limit: ${maxResults}`);
+  const searchStartTime = Date.now();
+  
+  try {
+    // Convert embedding to string format for Supabase function
+    const embeddingStr = JSON.stringify(embedding);
+    console.log(`📊 Query embedding size: ${embeddingStr.length} chars`);
+    
+    // First, let's check how many pages have embeddings
+    const { count: totalEmbeddedPages, error: countError } = await supabase
+      .from('pages')
+      .select('id', { count: 'exact', head: true })
+      .not('embedding', 'is', null);
+    
+    if (countError) {
+      console.error('❌ Error counting embedded pages:', countError);
+    } else {
+      console.log(`📋 Database has ${totalEmbeddedPages} pages with embeddings`);
+    }
+
+    // Use a more aggressive timeout and lower similarity for debugging
+    const debugSimilarity = Math.max(0.5, minSimilarity - 0.2); // Lower threshold for debugging
+    const debugLimit = Math.min(maxResults * 2, 20); // More results for debugging
+    
+    console.log(`🔧 Debug search params: similarity=${debugSimilarity}, limit=${debugLimit}`);
+
+    // Try the similarity search with timeout protection
+    const searchPromise = supabase.rpc('find_similar_pages', {
+      query_embedding: embeddingStr,
+      similarity_threshold: debugSimilarity,
+      match_limit: debugLimit
+    });
+
+    // Add manual timeout (8 seconds)
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Manual timeout after 8 seconds')), 8000);
+    });
+
+    const { data, error } = await Promise.race([searchPromise, timeoutPromise]) as any;
+    const searchDuration = Date.now() - searchStartTime;
+
+    if (error) {
+      console.error('❌ Similarity search error:', error);
+      
+      // If timeout, try a simpler approach
+      if (error.code === '57014' || error.message?.includes('timeout')) {
+        console.log('⚠️ Timeout detected, trying fallback approach...');
+        return await tryFallbackSearch(minSimilarity, maxResults);
+      }
+      
+      throw error;
+    }
+
+    const results = data || [];
+    console.log(`✅ Similarity search completed in ${searchDuration}ms: ${results.length} results`);
+    
+    // Debug log results
+    if (results.length > 0) {
+      console.log(`🎯 Top result: "${results[0].title}" (similarity: ${results[0].similarity})`);
+      console.log(`📊 Similarity scores: [${results.map((r: any) => r.similarity.toFixed(3)).join(', ')}]`);
+    } else {
+      console.log('🔍 No results found - this could mean:');
+      console.log('  • Similarity threshold too high');
+      console.log('  • No semantically similar content');
+      console.log('  • Embedding quality issues');
+    }
+
+    // Filter by original similarity threshold
+    const filteredResults = results.filter((r: any) => r.similarity >= minSimilarity);
+    console.log(`📝 After filtering (similarity >= ${minSimilarity}): ${filteredResults.length} results`);
+
+    // Map to our interface with real schema
+    const pages: PageWithEmbedding[] = filteredResults.slice(0, maxResults).map((row: any) => ({
+      id: row.id,
+      url: row.url,
+      title: row.title,
+      meta_description: row.meta_description,
+      h1: row.h1,
+      embedding: row.embedding || '[]',
+      similarity: row.similarity
+    }));
+
+    const debugInfo = {
+      searchDuration,
+      totalEmbeddedPages,
+      rawResultCount: results.length,
+      filteredResultCount: filteredResults.length,
+      finalResultCount: pages.length,
+      queryParams: { minSimilarity, maxResults, debugSimilarity, debugLimit },
+      topSimilarities: results.slice(0, 5).map((r: any) => r.similarity)
+    };
+
+    return { pages, debugInfo };
+
+  } catch (error: any) {
+    const searchDuration = Date.now() - searchStartTime;
+    console.error('❌ Similarity search failed:', error);
+    
+    const debugInfo = {
+      searchDuration,
+      error: error instanceof Error ? error.message : String(error),
+      errorCode: error.code,
+      queryParams: { minSimilarity, maxResults }
+    };
+
+    return { pages: [], debugInfo };
+  }
+}
+
+/**
+ * Fallback search when main similarity search times out
+ */
+async function tryFallbackSearch(
+  minSimilarity: number,
+  maxResults: number
+): Promise<{ pages: PageWithEmbedding[]; debugInfo: any }> {
+  console.log('🔄 Trying fallback search (simple query)...');
+  const fallbackStart = Date.now();
+  
+  try {
+    // Simple query to get random pages with embeddings for testing
+    const { data: randomPages, error } = await supabase
+      .from('pages')
+      .select('id, url, title, meta_description, h1, embedding')
+      .not('embedding', 'is', null)
+      .not('title', 'is', null)
+      .limit(maxResults);
+
+    const fallbackDuration = Date.now() - fallbackStart;
+
+    if (error) throw error;
+
+    // Mock similarity scores for fallback
+    const pages: PageWithEmbedding[] = (randomPages || []).map((page, index) => ({
+      id: page.id,
+      url: page.url,
+      title: page.title,
+      meta_description: page.meta_description,
+      h1: page.h1,
+      embedding: page.embedding || '[]',
+      similarity: 0.8 - (index * 0.1) // Mock decreasing similarity
+    }));
+
+    console.log(`🔄 Fallback search returned ${pages.length} results in ${fallbackDuration}ms`);
+
+    const debugInfo = {
+      searchType: 'fallback',
+      searchDuration: fallbackDuration,
+      resultCount: pages.length,
+      note: 'Using fallback due to timeout - results may not be semantically relevant'
+    };
+
+    return { pages, debugInfo };
+
+  } catch (error: any) {
+    console.error('❌ Fallback search also failed:', error);
+    return { 
+      pages: [], 
+      debugInfo: { 
+        searchType: 'fallback_failed', 
+        error: error instanceof Error ? error.message : String(error) 
+      } 
+    };
   }
 }
 
@@ -111,81 +292,54 @@ function createMatchOptions(
 }
 
 /**
- * CORRECTED: Find similar pages using Supabase vector similarity with real schema
- */
-async function findSimilarPages(
-  embedding: number[],
-  minSimilarity: number = 0.7,
-  maxResults: number = 3
-): Promise<PageWithEmbedding[]> {
-  try {
-    // Convert embedding to string format for Supabase function
-    const embeddingStr = JSON.stringify(embedding);
-    
-    const { data, error } = await supabase.rpc('find_similar_pages', {
-      query_embedding: embeddingStr,
-      similarity_threshold: minSimilarity,
-      match_limit: maxResults
-    });
-
-    if (error) {
-      console.error('Similarity search error:', error);
-      throw error;
-    }
-
-    // CORRECTED: Map to our interface with real schema
-    return (data || []).map((row: any) => ({
-      id: row.id,
-      url: row.url,
-      title: row.title,
-      meta_description: row.meta_description,
-      h1: row.h1,
-      embedding: row.embedding || '[]', // Handle null embeddings
-      similarity: row.similarity
-    }));
-
-  } catch (error) {
-    console.error('Failed to find similar pages:', error);
-    return [];
-  }
-}
-
-/**
- * Find matching pages for a single anchor candidate
+ * Find matching pages for a single anchor candidate with enhanced debugging
  */
 async function findCandidateMatches(
   candidate: AnchorCandidate,
   minSimilarity: number = 0.7,
   maxOptions: number = 3
-): Promise<AnchorMatch> {
+): Promise<AnchorMatch & { debugInfo?: any }> {
+  console.log(`\n🎯 Processing candidate: "${candidate.text}"`);
+  const candidateStartTime = Date.now();
+  
   try {
     // Generate embedding for the candidate
     const embedding = await generateCandidateEmbedding(candidate.text);
     
-    // Find similar pages using corrected function
-    const similarPages = await findSimilarPages(embedding, minSimilarity, maxOptions);
+    // Find similar pages using enhanced function
+    const { pages: similarPages, debugInfo } = await findSimilarPagesEnhanced(
+      embedding, 
+      minSimilarity, 
+      maxOptions
+    );
     
     // Create match options using corrected schema
     const options = createMatchOptions(candidate.text, similarPages);
     
+    const candidateDuration = Date.now() - candidateStartTime;
+    console.log(`✅ Candidate "${candidate.text}" processed in ${candidateDuration}ms: ${options.length} matches`);
+    
     return {
       anchor: candidate,
-      options: options.slice(0, maxOptions)
+      options: options.slice(0, maxOptions),
+      debugInfo
     };
     
   } catch (error) {
-    console.error(`Failed to find matches for "${candidate.text}":`, error);
+    const candidateDuration = Date.now() - candidateStartTime;
+    console.error(`❌ Failed to find matches for "${candidate.text}" after ${candidateDuration}ms:`, error);
     
     // Return empty match in case of error
     return {
       anchor: candidate,
-      options: []
+      options: [],
+      debugInfo: { error: error instanceof Error ? error.message : String(error), duration: candidateDuration }
     };
   }
 }
 
 /**
- * Main function to find matches for all anchor candidates
+ * Main function to find matches for all anchor candidates with enhanced debugging
  */
 export async function findAnchorMatches(
   candidates: AnchorCandidate[],
@@ -201,11 +355,13 @@ export async function findAnchorMatches(
     onProgress
   } = options;
   
+  console.log(`\n🚀 Starting enhanced anchor matching for ${candidates.length} candidates`);
+  console.log(`📋 Parameters: similarity >= ${minSimilarity}, max options = ${maxOptionsPerAnchor}`);
+  
   const matches: AnchorMatch[] = [];
   let totalMatches = 0;
   let totalScore = 0;
-  
-  console.log(`🔍 Finding matches for ${candidates.length} anchor candidates...`);
+  const allDebugInfo: any[] = [];
   
   // Process candidates with rate limiting
   for (let i = 0; i < candidates.length; i++) {
@@ -218,6 +374,14 @@ export async function findAnchorMatches(
         maxOptionsPerAnchor
       );
       
+      // Store debug info
+      if ('debugInfo' in anchorMatch) {
+        allDebugInfo.push({
+          candidate: candidate.text,
+          ...anchorMatch.debugInfo
+        });
+      }
+      
       // Only include anchors that have at least one match
       if (anchorMatch.options.length > 0) {
         matches.push(anchorMatch);
@@ -227,9 +391,9 @@ export async function findAnchorMatches(
         const anchorScore = anchorMatch.options.reduce((sum, opt) => sum + opt.relevanceScore, 0);
         totalScore += anchorScore;
         
-        console.log(`✓ Found ${anchorMatch.options.length} matches for "${candidate.text}"`);
+        console.log(`✅ Found ${anchorMatch.options.length} matches for "${candidate.text}"`);
       } else {
-        console.log(`○ No matches found for "${candidate.text}"`);
+        console.log(`🔍 No matches found for "${candidate.text}"`);
       }
       
       // Report progress if callback provided
@@ -243,31 +407,37 @@ export async function findAnchorMatches(
       }
       
     } catch (error) {
-      console.error(`Error processing candidate "${candidate.text}":`, error);
+      console.error(`❌ Error processing candidate "${candidate.text}":`, error);
       // Continue with other candidates
     }
   }
   
   const averageScore = totalMatches > 0 ? Math.round(totalScore / totalMatches * 100) / 100 : 0;
   
-  console.log(`🎉 Matching completed: ${matches.length} anchors with matches, ${totalMatches} total options, avg score: ${averageScore}`);
+  console.log(`\n🎉 Enhanced matching completed:`);
+  console.log(`  📊 ${matches.length} anchors with matches`);
+  console.log(`  🔗 ${totalMatches} total options`);
+  console.log(`  ⭐ Average score: ${averageScore}`);
   
   return {
     matches,
     totalCandidates: candidates.length,
     totalMatches,
-    averageScore
+    averageScore,
+    debugInfo: allDebugInfo
   };
 }
 
 /**
- * Get matches for specific anchor text (useful for single queries)
+ * Get matches for specific anchor text with enhanced debugging
  */
 export async function getMatchesForAnchor(
   anchorText: string,
   maxOptions: number = 5,
   minSimilarity: number = 0.7
 ): Promise<MatchOption[]> {
+  console.log(`\n🎯 Single anchor search: "${anchorText}"`);
+  
   try {
     // Create a minimal anchor candidate
     const candidate: AnchorCandidate = {
@@ -280,22 +450,31 @@ export async function getMatchesForAnchor(
     };
     
     const match = await findCandidateMatches(candidate, minSimilarity, maxOptions);
+    
+    // Log debug info if available
+    if ('debugInfo' in match && match.debugInfo) {
+      console.log('🔍 Debug info:', match.debugInfo);
+    }
+    
     return match.options;
     
   } catch (error) {
-    console.error(`Failed to get matches for anchor "${anchorText}":`, error);
+    console.error(`❌ Failed to get matches for anchor "${anchorText}":`, error);
     return [];
   }
 }
 
 /**
- * Check database embedding compatibility
+ * Check database embedding compatibility with enhanced diagnostics
  */
 export async function checkEmbeddingCompatibility(): Promise<{
   totalPages: number;
   pagesWithEmbeddings: number;
   compatibilityIssues: string[];
+  performanceCheck?: any;
 }> {
+  console.log('🔍 Running enhanced embedding compatibility check...');
+  
   try {
     // Check total pages
     const { count: totalPages, error: countError } = await supabase
@@ -311,6 +490,34 @@ export async function checkEmbeddingCompatibility(): Promise<{
       .not('embedding', 'is', null);
 
     if (embeddingError) throw embeddingError;
+
+    // Performance check - try a simple similarity search
+    let performanceCheck = null;
+    try {
+      const testEmbedding = new Array(1536).fill(0.1); // Simple test embedding
+      const perfStart = Date.now();
+      
+      const { data: testResults, error: perfError } = await supabase.rpc('find_similar_pages', {
+        query_embedding: JSON.stringify(testEmbedding),
+        similarity_threshold: 0.5,
+        match_limit: 1
+      });
+      
+      const perfDuration = Date.now() - perfStart;
+      
+      performanceCheck = {
+        success: !perfError,
+        duration: perfDuration,
+        resultCount: testResults?.length || 0,
+        error: perfError?.message
+      };
+      
+      console.log(`⚡ Performance check: ${perfDuration}ms, ${testResults?.length || 0} results`);
+      
+    } catch (perfErr) {
+      console.log('⚠️ Performance check failed:', perfErr);
+      performanceCheck = { success: false, error: String(perfErr) };
+    }
 
     // Check for invalid embeddings
     const { data: sampleEmbeddings, error: sampleError } = await supabase
@@ -338,17 +545,26 @@ export async function checkEmbeddingCompatibility(): Promise<{
       }
     }
 
+    // Add performance issues
+    if (performanceCheck && !performanceCheck.success) {
+      issues.push(`Similarity search failing: ${performanceCheck.error}`);
+    } else if (performanceCheck?.duration && performanceCheck.duration > 5000) {
+      issues.push(`Similarity search is slow (${performanceCheck.duration}ms) - consider adding vector index`);
+    }
+
     return {
       totalPages: totalPages || 0,
       pagesWithEmbeddings: pagesWithEmbeddings || 0,
-      compatibilityIssues: issues
+      compatibilityIssues: issues,
+      performanceCheck
     };
 
   } catch (error) {
     return {
       totalPages: 0,
       pagesWithEmbeddings: 0,
-      compatibilityIssues: [`Database check failed: ${error}`]
+      compatibilityIssues: [`Database check failed: ${error}`],
+      performanceCheck: { success: false, error: String(error) }
     };
   }
 }

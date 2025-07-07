@@ -1,20 +1,19 @@
+// src/components/linking/AnalyzeShell.tsx
 import { TextAnalyzer } from './interface/TextAnalyzer';
-import { SuggestionsList } from './interface/SuggestionsList';
 
 export function AnalyzeShell() {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Analyze Content</h1>
-        <p className="text-gray-600 mt-1">
-          Paste your SEO content below to get internal link suggestions
+      <div className="space-y-2">
+        <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
+          Interactive Link Analysis
+        </h1>
+        <p className="text-lg text-gray-600 leading-relaxed">
+          Paste your SEO content and discover internal linking opportunities by selecting text and finding relevant pages from your database
         </p>
       </div>
       
-      <div className="space-y-8">
-        <TextAnalyzer />
-        <SuggestionsList />
-      </div>
+      <TextAnalyzer />
     </div>
   );
 }
