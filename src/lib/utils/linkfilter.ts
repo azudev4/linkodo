@@ -52,38 +52,102 @@ export const SITE_SPECIFIC_EXCLUDED_PATTERNS = [
 ];
 
 /**
+ * Create Unicode-aware word boundary regex (for French accented characters)
+ */
+function createUnicodeWordBoundary(pattern: string): RegExp {
+  const wordChars = 'a-zA-ZàâäéèêëïîôùûüÿçÀÂÄÉÈÊËÏÎÔÙÛÜŸÇ0-9_';
+  return new RegExp(`(?<![${wordChars}])${pattern}(?![${wordChars}])`, 'gi');
+}
+
+/**
+ * Check if text contains standalone forum indicators (not partial matches)
+ */
+function hasStandaloneForumIndicators(text: string): boolean {
+  // Normalize text: lowercase and split into words/phrases
+  const normalizedText = text.toLowerCase();
+  
+  return FORUM_INDICATORS.some(indicator => {
+    // Handle special regex patterns
+    if (indicator.startsWith('REGEX:')) {
+      const pattern = indicator.replace('REGEX:', '');
+      const regex = createUnicodeWordBoundary(pattern);
+      return regex.test(normalizedText);
+    }
+    
+    // Default: standalone phrase matching
+    return hasStandalonePhrase(normalizedText, indicator.toLowerCase());
+  });
+}
+
+/**
+ * Check if a phrase exists as standalone words (not partial matches)
+ */
+function hasStandalonePhrase(text: string, phrase: string): boolean {
+  // Split text into words (handles punctuation)
+  const textWords = text.split(/\s+/);
+  const phraseWords = phrase.split(/\s+/);
+  
+  // For single words, check exact word match
+  if (phraseWords.length === 1) {
+    return textWords.some(word => {
+      // Remove punctuation for comparison
+      const cleanWord = word.replace(/[^\w'àâäéèêëïîôùûüÿç-]/gi, '');
+      return cleanWord === phrase;
+    });
+  }
+  
+  // For phrases, check consecutive word sequences
+  for (let i = 0; i <= textWords.length - phraseWords.length; i++) {
+    const textSlice = textWords.slice(i, i + phraseWords.length);
+    const cleanSlice = textSlice.map(word => 
+      word.replace(/[^\w'àâäéèêëïîôùûüÿç-]/gi, '')
+    );
+    
+    if (cleanSlice.join(' ') === phrase) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
  * Forum-specific patterns to detect in meta descriptions
- * Only obvious indicators that wouldn't appear in editorial content
+ * Supports both standalone word/phrase matching and Unicode-aware regex patterns
  */
 export const FORUM_INDICATORS = [
-  // First person pronouns (obvious forum indicators)
+  // First person pronouns (standalone matching)
   'je', 'j\'ai', 'j\'aimerais', 'j\'aurais', 'j\'espère', 'j\'aurai',
   'mon', 'ma', 'mes', 
   'moi je', 'nous avons', 'nous voulons', 'nous venons', 'pensez-vous', 
   
-  // Personal appeals (obvious forum language)
+  // Personal appeals (standalone matching)
   'quelqu\'un peut', 'personne sait', 'qui peut m\'aider',
   'besoin d\'aide', 'aidez-moi',
 
-  // Forum-specific questions
+  // Forum-specific questions (standalone matching)
   'pouvez-vous', 'peux-tu', 'peux-tu m\'aider',
   
-  // Forum-specific phrases
+  // Forum-specific phrases (standalone matching)
   'merci d\'avance', 'svp', 's\'il vous plaît',
   
-  // Informal greetings/closings
-  'salut', 'coucou', 'bonsoir les amis', 'bonjour', 'bonsoir', 'hello', 'coucou',
+  // Informal greetings/closings (standalone matching)
+  'salut', 'coucou', 'bonsoir les amis', 'bonjour', 'bonsoir', 'hello',
   
-  // SMS/internet slang (dead giveaway) - EXACT MATCHES ONLY
-  '\\bbcp\\b', '\\bqq1\\b', '\\bqqun\\b', '\\bpr\\b', '\\bds\\b', '\\bvs\\b', '\\bmdr\\b', '\\blol\\b',
-  'c\'', 'sé', '\\bpa\\b', '\\bke\\b', '\\bki\\b',
+  // SMS/internet slang - mix of approaches
+  'bcp', 'qqun', 'mdr', 'lol', 'qlqn',  // Standalone matching
+  'REGEX:pr',   // Special case: needs word boundary
+  'REGEX:pa',   // Special case: needs word boundary
+  'REGEX:ke',   // Special case: needs word boundary
+  'REGEX:ki',   // Special case: needs word boundary
+  'REGEX:ps',   // Special case: needs word boundary
   
-  // Informal punctuation patterns
+  // Informal punctuation patterns (standalone matching)
   '!!!', '???', '!!', '....',
   
-  // Direct personal context
+  // Direct personal context (standalone matching)
   'chez moi', 'dans ma', 'dans mon',
-  'j\'habite', 'on a', 'on habite', 'on me',
+  'j\'habite', 'on habite'
 ];
 
 /**
@@ -91,18 +155,7 @@ export const FORUM_INDICATORS = [
  */
 export function isForumContent(metaDescription: string): boolean {
   if (!metaDescription) return false;
-  
-  const text = metaDescription.toLowerCase();
-  
-  return FORUM_INDICATORS.some(indicator => {
-    // If indicator starts with \b, it's a regex pattern for exact word matching
-    if (indicator.startsWith('\\b')) {
-      const regex = new RegExp(indicator, 'i');
-      return regex.test(text);
-    }
-    // Otherwise, use simple includes for phrases and longer patterns
-    return text.includes(indicator.toLowerCase());
-  });
+  return hasStandaloneForumIndicators(metaDescription);
 }
 
 /**
