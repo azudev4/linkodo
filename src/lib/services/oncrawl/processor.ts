@@ -51,8 +51,8 @@ export async function syncPagesFromOnCrawlOptimized(
     const syncStartTime = Date.now();
     
     const result = syncMode === SyncMode.URL_ONLY 
-      ? await optimizedUrlOnlySync(indexablePages, syncHistoryId, filterStats)
-      : await optimizedSmartSync(indexablePages, syncHistoryId, filterStats);
+      ? await optimizedUrlOnlySync(indexablePages, syncHistoryId, projectName, filterStats)
+      : await optimizedSmartSync(indexablePages, syncHistoryId, projectName, filterStats);
     
     const syncDuration = Date.now() - syncStartTime;
     const overallDuration = Date.now() - overallStartTime;
