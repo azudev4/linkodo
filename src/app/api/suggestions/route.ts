@@ -6,24 +6,17 @@ export async function POST(request: NextRequest) {
   try {
     const { anchorText, maxSuggestions = 5 } = await request.json();
     
+    // Validate input
     if (!anchorText || typeof anchorText !== 'string') {
       return NextResponse.json(
-        { error: 'anchorText is required and must be a string' },
+        { error: 'Invalid anchor text - must be a non-empty string' },
         { status: 400 }
       );
     }
-    
-    // Validate anchor text length
-    if (anchorText.trim().length === 0) {
-      return NextResponse.json(
-        { error: 'anchorText cannot be empty' },
-        { status: 400 }
-      );
-    }
-    
+
     if (anchorText.length > 200) {
       return NextResponse.json(
-        { error: 'anchorText too long (max 200 characters)' },
+        { error: 'Anchor text too long - must be 200 characters or less' },
         { status: 400 }
       );
     }
@@ -32,41 +25,25 @@ export async function POST(request: NextRequest) {
     
     const suggestions = await getMatchesForAnchor(
       anchorText, 
-      Math.min(maxSuggestions, 10), // Cap at 10 suggestions
-      0.7 // Minimum similarity threshold
+      Math.min(maxSuggestions, 10) // Cap at 10 suggestions
     );
-    
-    console.log(`✅ Found ${suggestions.length} suggestions for "${anchorText}"`);
     
     return NextResponse.json({
       success: true,
       suggestions,
-      query: anchorText,
-      count: suggestions.length
+      meta: {
+        query: anchorText,
+        count: suggestions.length,
+        maxRequested: maxSuggestions
+      }
     });
-    
+
   } catch (error: any) {
-    console.error('Suggestions API error:', error);
-    
-    // Handle specific OpenAI errors
-    if (error.status === 429) {
-      return NextResponse.json(
-        { error: 'Rate limit exceeded. Please try again in a moment.' },
-        { status: 429 }
-      );
-    }
-    
-    if (error.code === 'insufficient_quota') {
-      return NextResponse.json(
-        { error: 'OpenAI quota exceeded. Please check your API usage.' },
-        { status: 503 }
-      );
-    }
-    
+    console.error('❌ Error getting suggestions:', error);
     return NextResponse.json(
       { 
-        error: 'Failed to find suggestions',
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        error: 'Failed to get suggestions',
+        details: error.message 
       },
       { status: 500 }
     );

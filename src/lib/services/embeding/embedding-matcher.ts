@@ -7,7 +7,7 @@ import { generateEmbedding, embeddingFromString } from './embeddings';
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 // Default configuration values
-const DEFAULT_SIMILARITY_THRESHOLD = 0.55;
+const DEFAULT_SIMILARITY_THRESHOLD = 0.52;
 
 /**
  * Represents a potential anchor text with context
@@ -77,122 +77,127 @@ async function generateCandidateEmbedding(candidateText: string): Promise<number
 }
 
 /**
- * Enhanced similarity search with timeout handling and debug logs
+ * Enhanced similarity search with proper timeout and retry handling
  */
 async function findSimilarPagesEnhanced(
   embedding: number[],
   minSimilarity: number = 0.7,
-  maxResults: number = 3
+  maxResults: number = 3,
+  maxRetries: number = 2
 ): Promise<{ pages: PageWithEmbedding[]; debugInfo: any }> {
   console.log(`🔍 Starting similarity search with threshold: ${minSimilarity}, limit: ${maxResults}`);
-  const searchStartTime = Date.now();
   
-  try {
-    // Convert embedding to string format for Supabase function
-    const embeddingStr = JSON.stringify(embedding);
-    console.log(`📊 Query embedding size: ${embeddingStr.length} chars`);
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const searchStartTime = Date.now();
     
-    // First, let's check how many pages have embeddings
-    const { count: totalEmbeddedPages, error: countError } = await supabase
-      .from('pages')
-      .select('id', { count: 'exact', head: true })
-      .not('embedding', 'is', null);
-    
-    if (countError) {
-      console.error('❌ Error counting embedded pages:', countError);
-    } else {
-      console.log(`📋 Database has ${totalEmbeddedPages} pages with embeddings`);
-    }
-
-    // Use a more aggressive timeout and lower similarity for debugging
-    const debugSimilarity = Math.max(0.5, minSimilarity - 0.2); // Lower threshold for debugging
-    const debugLimit = Math.min(maxResults * 2, 20); // More results for debugging
-    
-    console.log(`🔧 Debug search params: similarity=${debugSimilarity}, limit=${debugLimit}`);
-
-    // Try the similarity search with timeout protection
-    const searchPromise = supabase.rpc('find_similar_pages', {
-      query_embedding: embeddingStr,
-      similarity_threshold: debugSimilarity,
-      match_limit: debugLimit
-    });
-
-    // Add manual timeout (8 seconds)
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Manual timeout after 8 seconds')), 8000);
-    });
-
-    const { data, error } = await Promise.race([searchPromise, timeoutPromise]) as any;
-    const searchDuration = Date.now() - searchStartTime;
-
-    if (error) {
-      console.error('❌ Similarity search error:', error);
+    try {
+      const embeddingStr = JSON.stringify(embedding);
       
-      // Return no results on error or timeout
+      // Increase timeout based on database size - 30 seconds for large datasets
+      const timeoutMs = 30000;
+      
+      const searchPromise = supabase.rpc('find_similar_pages', {
+        query_embedding: embeddingStr,
+        similarity_threshold: Math.max(0.5, minSimilarity - 0.2),
+        match_limit: Math.min(maxResults * 2, 20)
+      });
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error(`Search timeout after ${timeoutMs}ms (attempt ${attempt})`)), timeoutMs);
+      });
+
+      const { data, error } = await Promise.race([searchPromise, timeoutPromise]) as any;
+      const searchDuration = Date.now() - searchStartTime;
+
+      if (error) {
+        // Check for specific PostgreSQL timeout error
+        if (error.code === '57014' || error.message?.includes('timeout') || error.message?.includes('canceling statement')) {
+          console.log(`⏱️ PostgreSQL timeout on attempt ${attempt}/${maxRetries} after ${searchDuration}ms`);
+          
+          if (attempt < maxRetries) {
+            // Exponential backoff: wait longer between retries
+            const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+            console.log(`🔄 Retrying in ${backoffMs}ms...`);
+            await new Promise(resolve => setTimeout(resolve, backoffMs));
+            continue; // Retry
+          }
+        }
+        
+        console.error(`❌ Similarity search failed on attempt ${attempt}:`, error);
+        return { 
+          pages: [], 
+          debugInfo: { 
+            searchType: 'failed',
+            error: error.message || String(error),
+            searchDuration,
+            attempts: attempt,
+            errorCode: error.code
+          } 
+        };
+      }
+
+      const results = data || [];
+      console.log(`✅ Similarity search succeeded on attempt ${attempt} in ${searchDuration}ms: ${results.length} results`);
+      
+      // Filter and process results
+      const filteredResults = results.filter((r: any) => r.similarity >= minSimilarity);
+      const pages: PageWithEmbedding[] = filteredResults.slice(0, maxResults).map((row: any) => ({
+        id: row.id,
+        url: row.url,
+        title: row.title,
+        meta_description: row.meta_description,
+        h1: row.h1,
+        embedding: row.embedding || '[]',
+        similarity: row.similarity
+      }));
+
+      const debugInfo = {
+        searchDuration,
+        rawResultCount: results.length,
+        filteredResultCount: filteredResults.length,
+        finalResultCount: pages.length,
+        attempts: attempt,
+        topSimilarities: results.slice(0, 5).map((r: any) => r.similarity)
+      };
+
+      return { pages, debugInfo };
+
+    } catch (error: any) {
+      const searchDuration = Date.now() - searchStartTime;
+      console.error(`❌ Similarity search error on attempt ${attempt}:`, error);
+      
+      if (attempt < maxRetries && (
+        error.message?.includes('timeout') || 
+        error.message?.includes('canceling') ||
+        error.code === '57014'
+      )) {
+        const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        console.log(`🔄 Retrying in ${backoffMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+        continue;
+      }
+      
       return { 
         pages: [], 
-        debugInfo: { 
+        debugInfo: {
           searchType: 'failed',
-          error: error instanceof Error ? error.message : String(error),
-          searchDuration
-        } 
+          error: error.message || String(error),
+          searchDuration,
+          attempts: attempt
+        }
       };
     }
-
-    const results = data || [];
-    console.log(`✅ Similarity search completed in ${searchDuration}ms: ${results.length} results`);
-    
-    // Debug log results
-    if (results.length > 0) {
-      console.log(`🎯 Top result: "${results[0].title}" (similarity: ${results[0].similarity})`);
-      console.log(`📊 Similarity scores: [${results.map((r: any) => r.similarity.toFixed(3)).join(', ')}]`);
-    } else {
-      console.log('🔍 No results found - this could mean:');
-      console.log('  • Similarity threshold too high');
-      console.log('  • No semantically similar content');
-      console.log('  • Embedding quality issues');
-    }
-
-    // Filter by original similarity threshold
-    const filteredResults = results.filter((r: any) => r.similarity >= DEFAULT_SIMILARITY_THRESHOLD);
-    console.log(`📝 After filtering (similarity >= ${DEFAULT_SIMILARITY_THRESHOLD}): ${filteredResults.length} results`);
-
-    // Map to our interface with real schema
-    const pages: PageWithEmbedding[] = filteredResults.slice(0, maxResults).map((row: any) => ({
-      id: row.id,
-      url: row.url,
-      title: row.title,
-      meta_description: row.meta_description,
-      h1: row.h1,
-      embedding: row.embedding || '[]',
-      similarity: row.similarity
-    }));
-
-    const debugInfo = {
-      searchDuration,
-      totalEmbeddedPages,
-      rawResultCount: results.length,
-      filteredResultCount: filteredResults.length,
-      finalResultCount: pages.length,
-      queryParams: { minSimilarity, maxResults, debugSimilarity, debugLimit },
-      topSimilarities: results.slice(0, 5).map((r: any) => r.similarity)
-    };
-
-    return { pages, debugInfo };
-
-  } catch (error: any) {
-    const searchDuration = Date.now() - searchStartTime;
-    console.error('❌ Similarity search failed:', error);
-    
-    return { 
-      pages: [], 
-      debugInfo: {
-        searchType: 'failed',
-        error: error instanceof Error ? error.message : String(error),
-        searchDuration
-      }
-    };
   }
+
+  // This should never be reached, but TypeScript needs it
+  return { 
+    pages: [], 
+    debugInfo: { 
+      searchType: 'failed', 
+      error: 'Max retries exceeded',
+      attempts: maxRetries 
+    } 
+  };
 }
 
 /**
