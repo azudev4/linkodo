@@ -1,14 +1,14 @@
-// src/lib/services/embeding/embedding-matcher.ts - ENHANCED WITH DEBUG LOGS
+// src/lib/services/embeding/embedding-matcher.ts - ENHANCED WITH DEBUG LOGS AND WEIGHTED EMBEDDINGS
 import OpenAI from 'openai';
 import { supabase } from '@/lib/db/client';
 import { AnchorCandidate } from '../text-processor';
-import { embeddingFromString } from './embeddings';
+import { generateEmbedding, embeddingFromString } from './embeddings';
 
 // Initialize OpenAI
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 // Default configuration values
-const DEFAULT_SIMILARITY_THRESHOLD = 0.7;
+const DEFAULT_SIMILARITY_THRESHOLD = 0.55;
 
 export interface MatchOption {
   id: string;
@@ -45,24 +45,22 @@ interface PageWithEmbedding {
 }
 
 /**
- * Generate embedding for an anchor candidate with debug logs
+ * Generate embedding for an anchor candidate with debug logs using weighted approach
  */
 async function generateCandidateEmbedding(candidateText: string): Promise<number[]> {
-  console.log(`🧠 Generating embedding for: "${candidateText}"`);
+  console.log(`🧠 Generating weighted embedding for: "${candidateText}"`);
   const startTime = Date.now();
   
   try {
-    const response = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: candidateText.trim(),
-    });
-
-    const duration = Date.now() - startTime;
-    console.log(`✅ Embedding generated in ${duration}ms (${response.data[0].embedding.length} dimensions)`);
+    // Use weighted embedding generation with title focus since anchor text is like a title
+    const embedding = await generateEmbedding(candidateText, null, null);
     
-    return response.data[0].embedding;
+    const duration = Date.now() - startTime;
+    console.log(`✅ Weighted embedding generated in ${duration}ms`);
+    
+    return embedding;
   } catch (error) {
-    console.error(`❌ Failed to generate embedding for "${candidateText}":`, error);
+    console.error(`❌ Failed to generate weighted embedding for "${candidateText}":`, error);
     throw error;
   }
 }
@@ -119,13 +117,15 @@ async function findSimilarPagesEnhanced(
     if (error) {
       console.error('❌ Similarity search error:', error);
       
-      // If timeout, try a simpler approach
-      if (error.code === '57014' || error.message?.includes('timeout')) {
-        console.log('⚠️ Timeout detected, trying fallback approach...');
-        return await tryFallbackSearch(minSimilarity, maxResults);
-      }
-      
-      throw error;
+      // Return no results on error or timeout
+      return { 
+        pages: [], 
+        debugInfo: { 
+          searchType: 'failed',
+          error: error instanceof Error ? error.message : String(error),
+          searchDuration
+        } 
+      };
     }
 
     const results = data || [];
@@ -173,70 +173,13 @@ async function findSimilarPagesEnhanced(
     const searchDuration = Date.now() - searchStartTime;
     console.error('❌ Similarity search failed:', error);
     
-    const debugInfo = {
-      searchDuration,
-      error: error instanceof Error ? error.message : String(error),
-      errorCode: error.code,
-      queryParams: { minSimilarity, maxResults }
-    };
-
-    return { pages: [], debugInfo };
-  }
-}
-
-/**
- * Fallback search when main similarity search times out
- */
-async function tryFallbackSearch(
-  minSimilarity: number,
-  maxResults: number
-): Promise<{ pages: PageWithEmbedding[]; debugInfo: any }> {
-  console.log('🔄 Trying fallback search (simple query)...');
-  const fallbackStart = Date.now();
-  
-  try {
-    // Simple query to get random pages with embeddings for testing
-    const { data: randomPages, error } = await supabase
-      .from('pages')
-      .select('id, url, title, meta_description, h1, embedding')
-      .not('embedding', 'is', null)
-      .not('title', 'is', null)
-      .limit(maxResults);
-
-    const fallbackDuration = Date.now() - fallbackStart;
-
-    if (error) throw error;
-
-    // Mock similarity scores for fallback
-    const pages: PageWithEmbedding[] = (randomPages || []).map((page, index) => ({
-      id: page.id,
-      url: page.url,
-      title: page.title,
-      meta_description: page.meta_description,
-      h1: page.h1,
-      embedding: page.embedding || '[]',
-      similarity: 0.8 - (index * 0.1) // Mock decreasing similarity
-    }));
-
-    console.log(`🔄 Fallback search returned ${pages.length} results in ${fallbackDuration}ms`);
-
-    const debugInfo = {
-      searchType: 'fallback',
-      searchDuration: fallbackDuration,
-      resultCount: pages.length,
-      note: 'Using fallback due to timeout - results may not be semantically relevant'
-    };
-
-    return { pages, debugInfo };
-
-  } catch (error: any) {
-    console.error('❌ Fallback search also failed:', error);
     return { 
       pages: [], 
-      debugInfo: { 
-        searchType: 'fallback_failed', 
-        error: error instanceof Error ? error.message : String(error) 
-      } 
+      debugInfo: {
+        searchType: 'failed',
+        error: error instanceof Error ? error.message : String(error),
+        searchDuration
+      }
     };
   }
 }
@@ -282,6 +225,18 @@ function createMatchOptions(
   return similarPages.map(page => {
     const match = determineMatchedSection(candidateText, page);
     
+    // Apply bonus based on match type
+    let score = page.similarity;
+    if (match.section === 'Title') {
+      score += 0.15; // +15% bonus for title matches
+    } else if (match.section === 'H1') {
+      score += 0.12; // +12% bonus for H1 matches  
+    } else if (match.section === 'Meta') {
+      score += 0.10; // +10% bonus for meta matches
+    } else {
+      score += 0.07; // +5% bonus for semantic matches
+    }
+    
     return {
       id: page.id,
       title: page.title || 'Untitled Page',
@@ -289,7 +244,7 @@ function createMatchOptions(
       description: page.meta_description || 'No description available',
       matchedSection: match.section,
       matchedContent: match.content,
-      relevanceScore: Math.round(page.similarity * 100) / 100
+      relevanceScore: Math.min(1, Math.round(score * 100) / 100) // Cap at 100%
     };
   });
 }
@@ -306,7 +261,7 @@ async function findCandidateMatches(
   const candidateStartTime = Date.now();
   
   try {
-    // Generate embedding for the candidate
+    // Generate weighted embedding for the candidate
     const embedding = await generateCandidateEmbedding(candidate.text);
     
     // Find similar pages using enhanced function
@@ -439,7 +394,7 @@ export async function getMatchesForAnchor(
   maxOptions: number = 5,
   minSimilarity: number = DEFAULT_SIMILARITY_THRESHOLD
 ): Promise<MatchOption[]> {
-  console.log(`\n🎯 Single anchor search: "${anchorText}"`);
+  console.log(`\n🎯 Single anchor search with weighted embedding: "${anchorText}"`);
   
   try {
     // Create a minimal anchor candidate
@@ -476,7 +431,7 @@ export async function checkEmbeddingCompatibility(): Promise<{
   compatibilityIssues: string[];
   performanceCheck?: any;
 }> {
-  console.log('🔍 Running enhanced embedding compatibility check...');
+  console.log('🔍 Running enhanced embedding compatibility check for weighted embeddings...');
   
   try {
     // Check total pages
@@ -494,10 +449,11 @@ export async function checkEmbeddingCompatibility(): Promise<{
 
     if (embeddingError) throw embeddingError;
 
-    // Performance check - try a simple similarity search
+    // Performance check - try a weighted similarity search
     let performanceCheck = null;
     try {
-      const testEmbedding = new Array(1536).fill(0.1); // Simple test embedding
+      // Generate a test weighted embedding
+      const testEmbedding = await generateEmbedding("Test Page", "Test H1", "Test Description");
       const perfStart = Date.now();
       
       const { data: testResults, error: perfError } = await supabase.rpc('find_similar_pages', {
@@ -515,7 +471,7 @@ export async function checkEmbeddingCompatibility(): Promise<{
         error: perfError?.message
       };
       
-      console.log(`⚡ Performance check: ${perfDuration}ms, ${testResults?.length || 0} results`);
+      console.log(`⚡ Performance check with weighted embedding: ${perfDuration}ms, ${testResults?.length || 0} results`);
       
     } catch (perfErr) {
       console.log('⚠️ Performance check failed:', perfErr);

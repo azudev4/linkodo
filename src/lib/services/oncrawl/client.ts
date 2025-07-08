@@ -132,35 +132,26 @@ class OnCrawlClient {
     return response.projects;
   }
 
-
-
   private async getAllPages(crawlId: string): Promise<OnCrawlPage[]> {
-    // Get available fields
-    const fieldsResponse = await this.request<{ fields: Array<{ name: string }> }>(`/data/crawl/${crawlId}/pages/fields`);
-    const availableFields = fieldsResponse.fields.map(field => field.name);
+    // Essential fields for internal linking - hardcoded to avoid extra API call
+    const essentialFields = [
+      'url',
+      'title', 
+      'h1',
+      'meta_description',
+      'status_code',
+      'word_count',
+      'depth',
+      'inrank_decimal',
+      'internal_outlinks',
+      'nb_inlinks'
+    ];
     
-    // Essential fields for internal linking
-    const fieldMapping: { [key: string]: string } = {
-      'url': 'url',
-      'title': 'title', 
-      'h1': 'h1',
-      'meta_description': 'meta_description',
-      'status_code': 'status_code',
-      'word_count': 'word_count',
-      'depth': 'depth',
-      'inrank_decimal': 'inrank_decimal',
-      'internal_outlinks': 'internal_outlinks',
-      'nb_inlinks': 'nb_inlinks'
-    };
-    
-    const desiredFields = Object.keys(fieldMapping).filter(field => 
-      availableFields.includes(field)
-    );
-    
+    // Fetch pages with minimal processing
     const pages = await this.request<OnCrawlPage[]>(`/data/crawl/${crawlId}/pages?export=true`, {
       method: 'POST',
       body: JSON.stringify({
-        fields: desiredFields,
+        fields: essentialFields,
         oql: { field: ["depth", "has_value", ""] }
       }),
     });
@@ -211,8 +202,6 @@ class OnCrawlClient {
     
     return { crawl, pages };
   }
-
-
 }
 
 export { OnCrawlClient, type OnCrawlProject, type OnCrawlCrawl, type OnCrawlPage, type CrawlData };

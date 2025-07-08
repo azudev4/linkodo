@@ -12,7 +12,21 @@ export async function generateEmbedding(
   h1: string | null,
   metaDescription: string | null
 ): Promise<number[]> {
-  const combinedText = [title, h1, metaDescription].filter(Boolean).join(' ');
+  const textParts: string[] = [];
+  
+  if (title) {
+    textParts.push(title, title); // 3x weight
+  }
+  
+  if (h1 && h1 !== title) {
+    textParts.push(h1, h1); // 2x weight
+  }
+  
+  if (metaDescription) {
+    textParts.push(metaDescription); // 1x weight
+  }
+  
+  const combinedText = textParts.join(' ');
 
   if (!combinedText.trim()) {
     throw new Error('No content available to generate embedding');
@@ -55,17 +69,16 @@ export async function generateEmbeddingsOptimized(): Promise<{ processed: number
   console.log(`Found ${count} pages without embeddings`);
   
   // 🔥 ULTRA AGGRESSIVE SETTINGS - Push to the limit
-  const BATCH_SIZE = 500;             // MASSIVE batches
-  const MAX_CONCURRENT = 500;         // MAXIMUM parallelism
+  const BATCH_SIZE = 800;             // MASSIVE batches
+  const MAX_CONCURRENT = 800;         // MAXIMUM parallelism
   const DELAY_BETWEEN_BATCHES = 50;    // Minimal delay
   
-  const estimatedMinutes = Math.round(count / 2500 * 60 * 10) / 10; // More realistic estimate
+
   
   console.log(`🚀 ULTRA AGGRESSIVE SETTINGS:
     Batch size: ${BATCH_SIZE} (was 300)
     Concurrency: ${MAX_CONCURRENT} (was 300)
     Delay: ${DELAY_BETWEEN_BATCHES}ms (was 100ms)
-    Estimated time: ${estimatedMinutes} minutes (assuming 2500/min avg)
     Target: Push towards 3000/min limit!
   `);
 

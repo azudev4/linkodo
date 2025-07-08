@@ -5,59 +5,8 @@
 export const SITE_SPECIFIC_EXCLUDED_PATTERNS = [
   // Forum and legacy content
   'forum',  // Exclude forum links
-  
-  // Pagination
-  '/2',
-  '/3',
-  '/4',
-  '/5',
-  '/6',
-  '/7',
-  '/8',
-  '/9',
-  '/10',
-  '/11',
-  '/12',
-  '/13',
-  '/14',
-  '/15',
-  '/16',
-  '/17',
-  '/18',
-  '/19',
-  '/20',
-  '/21',
-  '/22',
-  '/23',
-  '/24',
-  '/25',
-  '/26',
-  '/27',
-  '/28',
-  '/29',
-  '/30',
-  '/31',
-  '/32',
-  '/33',
-  '/34',
-  '/35',
-  '/36',
-  '/37',
-  '/38',
-  '/39',
-  '/40',
-  '/41',
-  '/42',
-  '/43',
+  '3D'
 ];
-
-/**
- * Create Unicode-aware word boundary regex (for French accented characters)
- */
-function createUnicodeWordBoundary(pattern: string): RegExp {
-  const wordChars = 'a-zA-ZàâäéèêëïîôùûüÿçÀÂÄÉÈÊËÏÎÔÙÛÜŸÇ0-9_';
-  return new RegExp(`(?<![${wordChars}])${pattern}(?![${wordChars}])`, 'gi');
-}
 
 /**
  * Check if text contains standalone forum indicators (not partial matches)
@@ -66,17 +15,9 @@ function hasStandaloneForumIndicators(text: string): boolean {
   // Normalize text: lowercase and split into words/phrases
   const normalizedText = text.toLowerCase();
   
-  return FORUM_INDICATORS.some(indicator => {
-    // Handle special regex patterns
-    if (indicator.startsWith('REGEX:')) {
-      const pattern = indicator.replace('REGEX:', '');
-      const regex = createUnicodeWordBoundary(pattern);
-      return regex.test(normalizedText);
-    }
-    
-    // Default: standalone phrase matching
-    return hasStandalonePhrase(normalizedText, indicator.toLowerCase());
-  });
+  return FORUM_INDICATORS.some(indicator => 
+    hasStandalonePhrase(normalizedText, indicator.toLowerCase())
+  );
 }
 
 /**
@@ -113,7 +54,6 @@ function hasStandalonePhrase(text: string, phrase: string): boolean {
 
 /**
  * Forum-specific patterns to detect in meta descriptions
- * Supports both standalone word/phrase matching and Unicode-aware regex patterns
  */
 export const FORUM_INDICATORS = [
   // First person pronouns (standalone matching)
@@ -134,20 +74,18 @@ export const FORUM_INDICATORS = [
   // Informal greetings/closings (standalone matching)
   'salut', 'coucou', 'bonsoir les amis', 'bonjour', 'bonsoir', 'hello',
   
-  // SMS/internet slang - mix of approaches
-  'bcp', 'qqun', 'mdr', 'lol', 'qlqn',  // Standalone matching
-  'REGEX:pr',   // Special case: needs word boundary
-  'REGEX:pa',   // Special case: needs word boundary
-  'REGEX:ke',   // Special case: needs word boundary
-  'REGEX:ki',   // Special case: needs word boundary
-  'REGEX:ps',   // Special case: needs word boundary
+  // SMS/internet slang - standalone matching only
+  'bcp', 'qqun', 'mdr', 'lol', 'qlqn',
   
   // Informal punctuation patterns (standalone matching)
   '!!!', '???', '!!', '....',
   
   // Direct personal context (standalone matching)
   'chez moi', 'dans ma', 'dans mon',
-  'j\'habite', 'on habite'
+  'j\'habite', 'on habite',
+
+  // Else
+  'forum', 'discussion',
 ];
 
 /**
@@ -159,7 +97,27 @@ export function isForumContent(metaDescription: string): boolean {
 }
 
 /**
- * Enhanced link filtering with forum detection
+ * Check if title indicates a pagination page
+ */
+function isPaginationTitle(title?: string): boolean {
+  if (!title) return false;
+  
+  // Simple word boundary check for 'page'
+  const titleWords = title.toLowerCase().split(/\s+/);
+  if (titleWords.some(word => word === 'page')) {
+    return true;
+  }
+  
+  // Check for "Page X of Y" pattern
+  if (/page\s+\d+(\s+of\s+\d+)?/i.test(title)) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Enhanced link filtering with forum and pagination detection
  */
 export interface FilterResult {
   isFiltered: boolean;
@@ -178,6 +136,15 @@ export function filterLink(
     return {
       isFiltered: true,
       reason: 'probable_forum',
+      confidence: 'high'
+    };
+  }
+
+  // Check for pagination in title
+  if (title && isPaginationTitle(title)) {
+    return {
+      isFiltered: true,
+      reason: 'pagination_page',
       confidence: 'high'
     };
   }
@@ -797,7 +764,7 @@ function isValidUrl(url: string): boolean {
 /**
  * Check if a URL should be excluded from indexing
  */
-export function shouldExcludeUrl(url: string, metaDescription?: string): boolean {
+export function shouldExcludeUrl(url: string, title?: string, metaDescription?: string): boolean {
   if (!url) return true;
   
   // Check for malformed URLs first
@@ -808,6 +775,9 @@ export function shouldExcludeUrl(url: string, metaDescription?: string): boolean
   
   // Check for forum content in meta description
   if (metaDescription && isForumContent(metaDescription)) return true;
+
+  // Check for pagination in title
+  if (title && isPaginationTitle(title)) return true;
   
   try {
     const urlObj = new URL(url);
@@ -848,14 +818,18 @@ export function shouldExcludeUrl(url: string, metaDescription?: string): boolean
 /**
  * Filter an array of URLs to remove excluded ones
  */
-export function filterIndexableUrls(urls: string[]): string[] {
-  return urls.filter(url => !shouldExcludeUrl(url));
+export function filterIndexableUrls(urls: string[], titles?: string[], metaDescriptions?: string[]): string[] {
+  return urls.filter((url, index) => {
+    const title = titles?.[index];
+    const metaDescription = metaDescriptions?.[index];
+    return !shouldExcludeUrl(url, title, metaDescription);
+  });
 }
 
 /**
  * Get exclusion reason for debugging
  */
-export function getExclusionReason(url: string, metaDescription?: string): string | null {
+export function getExclusionReason(url: string, title?: string, metaDescription?: string): string | null {
   if (!url) return 'Empty URL';
   
   // Check for malformed URLs first
@@ -867,14 +841,15 @@ export function getExclusionReason(url: string, metaDescription?: string): strin
   if (metaDescription && isForumContent(metaDescription)) {
     const text = metaDescription.toLowerCase();
     const foundIndicator = FORUM_INDICATORS.find(indicator => {
-      if (indicator.startsWith('\\b')) {
-        const regex = new RegExp(indicator, 'i');
-        return regex.test(text);
-      }
-      return text.includes(indicator.toLowerCase());
+      return hasStandalonePhrase(text, indicator.toLowerCase());
     });
     
-    return `Forum '${foundIndicator || 'unknown pattern'}' detected`;
+    return `Forum '${foundIndicator || 'unknown phrase'}' detected`;
+  }
+
+  // Check pagination in title
+  if (title && isPaginationTitle(title)) {
+    return 'Pagination page detected in title';
   }
   
   try {

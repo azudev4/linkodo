@@ -5,52 +5,69 @@ import { syncPagesFromOnCrawlOptimized, determinePageCategory } from '@/lib/serv
 import { shouldExcludeUrl, getExclusionReason } from '@/lib/utils/linkfilter';
 import * as XLSX from 'xlsx';
 
+// Cache for category determinations
+const categoryCache = new Map<string, string>();
+
+// Batch size for processing pages
+const BATCH_SIZE = 1000;
+
 /**
  * Generate Excel file from OnCrawl pages data
  */
 function generateExcel(pages: OnCrawlPage[]): Buffer {
   const workbook = XLSX.utils.book_new();
   
-  // Prepare data for Excel with all available fields
-  const excelData = pages.map(page => {
+  // Process pages in batches to reduce memory pressure
+  const processPageBatch = (batch: OnCrawlPage[]) => batch.map(page => {
     const url = page.url || '';
-    const title = page.title || '';
-    const statusCode = page.status_code || '';
-    const wordCount = page.word_count || '';
-    const h1 = page.h1 || '';
-    const metaDescription = page.meta_description || '';
     
-    // SEO metrics
-    const depth = page.depth || '';
-    const inrankDecimal = page.inrank_decimal || '';
-    const internalOutlinks = page.internal_outlinks || '';
-    const nbInlinks = page.nb_inlinks || '';
-    
-    // Determine page category and exclusion status
-    const category = determinePageCategory(url);
-    const shouldExclude = !url || shouldExcludeUrl(url, metaDescription || undefined) || (statusCode && parseInt(statusCode) !== 200);
+    // Only process category if URL is valid and not in cache
+    let category = '';
+    if (url) {
+      category = categoryCache.get(url) || '';
+      if (!category) {
+        category = determinePageCategory(url);
+        categoryCache.set(url, category);
+      }
+    }
+
+    // Quick exclusion check without unnecessary string operations
+    const statusCode = page.status_code ? parseInt(page.status_code) : 0;
+    const shouldExclude = !url || 
+      (statusCode && statusCode !== 200) || 
+      shouldExcludeUrl(url, page.title || undefined, page.meta_description || undefined);
+
+    // Only get exclusion reason if actually excluded
     const exclusionReason = shouldExclude ? 
       (!url ? 'No URL' : 
-        statusCode && parseInt(statusCode) !== 200 ? `Status code: ${statusCode}` : 
-        getExclusionReason(url, metaDescription || undefined) || 'Unknown reason'
+        (statusCode && statusCode !== 200) ? `Status code: ${statusCode}` : 
+        getExclusionReason(url, page.title || undefined, page.meta_description || undefined)
       ) : '';
     
+    // Return minimal object with only necessary transformations
     return {
       'URL': url,
-      'Title': title,
+      'Title': page.title || '',
       'Category': category,
-      'Status Code': statusCode,
-      'Word Count': wordCount,
-      'H1': h1,
-      'Meta Description': metaDescription,
-      'Depth': depth,
-      'Internal Rank (Decimal)': inrankDecimal,
-      'Internal Outlinks': internalOutlinks,
-      'Inlinks Count': nbInlinks,
+      'Status Code': page.status_code || '',
+      'Word Count': page.word_count || '',
+      'H1': page.h1 || '',
+      'Meta Description': page.meta_description || '',
+      'Depth': page.depth || '',
+      'Internal Rank (Decimal)': page.inrank_decimal || '',
+      'Internal Outlinks': page.internal_outlinks || '',
+      'Inlinks Count': page.nb_inlinks || '',
       'Excluded': shouldExclude ? 'YES' : 'NO',
       'Exclusion Reason': exclusionReason
     };
   });
+
+  // Process pages in batches
+  const excelData = [];
+  for (let i = 0; i < pages.length; i += BATCH_SIZE) {
+    const batch = pages.slice(i, i + BATCH_SIZE);
+    excelData.push(...processPageBatch(batch));
+  }
   
   const worksheet = XLSX.utils.json_to_sheet(excelData);
   
@@ -74,13 +91,12 @@ function generateExcel(pages: OnCrawlPage[]): Buffer {
   
   XLSX.utils.book_append_sheet(workbook, worksheet, 'OnCrawl Pages');
   
-  const excelBuffer = XLSX.write(workbook, { 
+  // Use compression to reduce file size
+  return Buffer.from(XLSX.write(workbook, { 
     type: 'buffer', 
     bookType: 'xlsx',
     compression: true 
-  });
-  
-  return Buffer.from(excelBuffer);
+  }));
 }
 
 /**

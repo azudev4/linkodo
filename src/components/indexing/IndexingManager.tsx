@@ -438,25 +438,28 @@ export function IndexingManager() {
           {/* Download Options */}
           <div className="space-y-3">
             <div className="text-sm font-medium text-gray-700">Debug Export:</div>
-            <div className="flex gap-3">
-              <Button
-                onClick={handleDownload}
-                disabled={!selectedProject || isDownloading}
-                variant="outline"
-                className="flex-1 h-10 rounded-lg border-2 hover:bg-gray-50 hover:text-gray-600 hover:border-gray-200 transition-all duration-200"
-              >
-                {isDownloading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    <span className="font-medium">Downloading...</span>
-                  </>
-                ) : (
-                  <>
-                    <FileText className="w-4 h-4 mr-2" />
-                    <span className="font-medium">Excel (.xlsx)</span>
-                  </>
-                )}
-              </Button>
+            <div className="flex flex-col gap-3">
+              {/* Fixed height container to prevent layout shifts */}
+              <div className="min-h-[40px]">
+                <Button
+                  onClick={handleDownload}
+                  disabled={!selectedProject || isDownloading}
+                  variant="outline"
+                  className="flex-1 h-10 rounded-lg border-2 hover:bg-gray-50 hover:text-gray-600 hover:border-gray-200 transition-all duration-200"
+                >
+                  {isDownloading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      <span className="font-medium">Downloading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="w-4 h-4 mr-2" />
+                      <span className="font-medium">Excel (.xlsx)</span>
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </CardContent>
