@@ -1,7 +1,6 @@
 // src/lib/services/embeding/embedding-matcher.ts - ENHANCED WITH DEBUG LOGS AND WEIGHTED EMBEDDINGS
 import OpenAI from 'openai';
 import { supabase } from '@/lib/db/client';
-import { AnchorCandidate } from '../text-processor';
 import { generateEmbedding, embeddingFromString } from './embeddings';
 
 // Initialize OpenAI
@@ -9,6 +8,18 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 // Default configuration values
 const DEFAULT_SIMILARITY_THRESHOLD = 0.55;
+
+/**
+ * Represents a potential anchor text with context
+ */
+interface AnchorCandidate {
+  text: string;
+  startIndex: number;
+  endIndex: number;
+  contextBefore: string;
+  contextAfter: string;
+  score: number;
+}
 
 export interface MatchOption {
   id: string;

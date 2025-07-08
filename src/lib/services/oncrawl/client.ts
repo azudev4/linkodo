@@ -1,5 +1,6 @@
 // src/lib/services/oncrawl/client.ts
 import { decodeHtmlEntities } from '@/lib/utils/html-entities';
+import { OnCrawlPage } from './types';
 
 /**
  * Properly parses a CSV line respecting quoted fields
@@ -55,41 +56,23 @@ interface OnCrawlCrawl {
   url?: string;
 }
 
-interface OnCrawlPage {
-  // Core content
-  url: string;
-  title: string | null;
-  h1: string | null;
-  meta_description: string | null;
-  
-  // Technical
-  status_code: string | null;
-  word_count: string | null;
-  
-  // SEO & Linking metrics
-  depth: string | null;
-  inrank_decimal: string | null;
-  internal_outlinks: string | null;
-  nb_inlinks: string | null;
-}
-
 interface CrawlData {
   crawl: OnCrawlCrawl;
   pages: OnCrawlPage[];
 }
 
 class OnCrawlClient {
+  private apiToken: string;
   private baseUrl = 'https://app.oncrawl.com/api/v2';
-  private token: string;
 
-  constructor(token: string) {
-    this.token = token;
+  constructor(apiToken: string) {
+    this.apiToken = apiToken;
   }
 
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       headers: {
-        'Authorization': `Bearer ${this.token}`,
+        'Authorization': `Bearer ${this.apiToken}`,
         'Content-Type': 'application/json',
         ...options?.headers,
       },
@@ -204,4 +187,4 @@ class OnCrawlClient {
   }
 }
 
-export { OnCrawlClient, type OnCrawlProject, type OnCrawlCrawl, type OnCrawlPage, type CrawlData };
+export { OnCrawlClient, type OnCrawlProject, type OnCrawlCrawl, type CrawlData };

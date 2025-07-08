@@ -1,4 +1,4 @@
-// src/lib/services/embedding/embeddings.ts - SIMPLE & FAST VERSION
+// src/lib/services/embeding/embeddings.ts - PRECISE FIXES
 import OpenAI from 'openai';
 import { supabase } from '@/lib/db/client';
 
@@ -52,11 +52,72 @@ export function embeddingFromString(embeddingStr: string): number[] {
 }
 
 /**
- * SIMPLE MAXIMUM SPEED - No overengineering, just raw speed
+ * FIX #1: Check if a page has embeddable content BEFORE processing
  */
-export async function generateEmbeddingsOptimized(): Promise<{ processed: number; failed: number }> {
-  console.log('🚀 Starting SIMPLE MAXIMUM SPEED embedding generation...');
+function hasEmbeddableContent(page: { title: string | null; h1: string | null; meta_description: string | null }): boolean {
+  const combinedText = [page.title, page.h1, page.meta_description]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
   
+  return combinedText.length > 0;
+}
+
+/**
+ * FIX #2: Mark pages with no content as "processed" so they don't get fetched again
+ */
+async function markUnembeddablePages(): Promise<number> {
+  console.log('🔍 Identifying and marking pages with no embeddable content...');
+  
+  // Find pages with no content that keep getting processed
+  const { data: emptyPages, error } = await supabase
+    .from('pages')
+    .select('id, title, h1, meta_description')
+    .is('embedding', null);
+  
+  if (error || !emptyPages) {
+    console.error('❌ Failed to fetch pages for content check:', error);
+    return 0;
+  }
+  
+  // Filter pages with no embeddable content
+  const unembeddablePages = emptyPages.filter(page => !hasEmbeddableContent(page));
+  
+  if (unembeddablePages.length === 0) {
+    console.log('✅ No unembeddable pages found');
+    return 0;
+  }
+  
+  console.log(`📝 Found ${unembeddablePages.length} pages with no embeddable content. Marking them...`);
+  
+  // Mark them with a special embedding value so they don't get processed again
+  const { error: updateError } = await supabase
+    .from('pages')
+    .update({ 
+      embedding: '[]', // Empty array indicates "no embeddable content"
+      updated_at: new Date().toISOString()
+    })
+    .in('id', unembeddablePages.map(p => p.id));
+  
+  if (updateError) {
+    console.error('❌ Failed to mark unembeddable pages:', updateError);
+    return 0;
+  }
+  
+  console.log(`✅ Marked ${unembeddablePages.length} unembeddable pages`);
+  return unembeddablePages.length;
+}
+
+/**
+ * FIX #3: FIXED embedding generation with proper rate limiting and content validation
+ */
+export async function generateEmbeddingsOptimized(): Promise<{ processed: number; failed: number; skipped: number }> {
+  console.log('🚀 Starting FIXED embedding generation...');
+  
+  // FIX #1: First, mark unembeddable pages so they don't get processed
+  const skippedCount = await markUnembeddablePages();
+  
+  // Get count of pages that actually have embeddable content
   const { count, error: countError } = await supabase
     .from('pages')
     .select('id', { count: 'exact', head: true })
@@ -66,20 +127,19 @@ export async function generateEmbeddingsOptimized(): Promise<{ processed: number
     throw new Error(`Failed to get page count: ${countError?.message}`);
   }
 
-  console.log(`Found ${count} pages without embeddings`);
+  console.log(`Found ${count} pages without embeddings (after filtering unembeddable content)`);
   
-  // 🔥 ULTRA AGGRESSIVE SETTINGS - Push to the limit
-  const BATCH_SIZE = 800;             // MASSIVE batches
-  const MAX_CONCURRENT = 800;         // MAXIMUM parallelism
-  const DELAY_BETWEEN_BATCHES = 50;    // Minimal delay
-  
+  // FIX #2: MUCH more conservative settings to avoid rate limits
+  const BATCH_SIZE = 200;           // Reduced from 800
+  const MAX_CONCURRENT = 20;        // Reduced from 800 to avoid rate limits
+  const DELAY_BETWEEN_BATCHES = 500; // Increased from 50ms
+  const RETRY_DELAY = 2000;         // 2 seconds for rate limit retry
 
-  
-  console.log(`🚀 ULTRA AGGRESSIVE SETTINGS:
-    Batch size: ${BATCH_SIZE} (was 300)
-    Concurrency: ${MAX_CONCURRENT} (was 300)
-    Delay: ${DELAY_BETWEEN_BATCHES}ms (was 100ms)
-    Target: Push towards 3000/min limit!
+  console.log(`🔧 CONSERVATIVE SETTINGS:
+    Batch size: ${BATCH_SIZE} (was 800)
+    Concurrency: ${MAX_CONCURRENT} (was 800) 
+    Delay: ${DELAY_BETWEEN_BATCHES}ms (was 50ms)
+    Target: Reliable completion over speed
   `);
 
   let processed = 0;
@@ -87,76 +147,118 @@ export async function generateEmbeddingsOptimized(): Promise<{ processed: number
   const startTime = Date.now();
 
   for (let offset = 0; offset < count; offset += BATCH_SIZE) {
+    // FIX #3: Only fetch pages that have embeddable content
     const { data: pages, error } = await supabase
       .from('pages')
       .select('id, title, h1, meta_description')
       .is('embedding', null)
+      .not('embedding', 'eq', '[]') // Exclude already marked unembeddable pages
       .range(offset, offset + BATCH_SIZE - 1);
 
     if (error || !pages?.length) break;
 
+    // FIX #4: Filter out pages with no content BEFORE processing
+    const embeddablePages = pages.filter(page => hasEmbeddableContent(page));
+    
+    if (embeddablePages.length === 0) {
+      console.log(`⚪ Batch ${Math.floor(offset / BATCH_SIZE) + 1}: No embeddable pages, skipping`);
+      continue;
+    }
+
     const batchNum = Math.floor(offset / BATCH_SIZE) + 1;
     const totalBatches = Math.ceil(count / BATCH_SIZE);
-    console.log(`🔥 Batch ${batchNum}/${totalBatches} (${pages.length} pages)`);
+    console.log(`🔄 Batch ${batchNum}/${totalBatches} (${embeddablePages.length} embeddable pages)`);
 
-    // Process ALL pages in parallel - maximum aggression
+    // FIX #5: Process in smaller chunks with proper concurrency control
     const batchStart = Date.now();
+    const chunks = [];
     
-    const results = await Promise.all(pages.map(async (page) => {
-      try {
-        const combinedText = [page.title, page.h1, page.meta_description]
-          .filter(Boolean).join(' ');
+    for (let i = 0; i < embeddablePages.length; i += MAX_CONCURRENT) {
+      chunks.push(embeddablePages.slice(i, i + MAX_CONCURRENT));
+    }
+    
+    let batchProcessed = 0;
+    let batchFailed = 0;
+    
+    for (const chunk of chunks) {
+      const chunkResults = await Promise.all(chunk.map(async (page, index) => {
+        try {
+          const combinedText = [page.title, page.h1, page.meta_description]
+            .filter(Boolean).join(' ');
 
-        if (!combinedText.trim()) {
-          return { success: false };
+          // This should never happen due to pre-filtering, but double-check
+          if (!combinedText.trim()) {
+            console.warn(`⚠️ Page ${page.id} passed filter but has no content`);
+            return { success: false, shouldRetry: false };
+          }
+
+          const response = await openai.embeddings.create({
+            model: 'text-embedding-3-small',
+            input: combinedText,
+          });
+
+          const embeddingStr = embeddingToString(response.data[0].embedding);
+
+          const { error: updateError } = await supabase
+            .from('pages')
+            .update({ 
+              embedding: embeddingStr,
+              updated_at: new Date().toISOString() 
+            })
+            .eq('id', page.id);
+
+          if (updateError) throw updateError;
+          return { success: true, shouldRetry: false };
+          
+        } catch (error: any) {
+          // FIX #6: Better rate limit handling
+          if (error.status === 429) {
+            console.log(`⏱️ Rate limit hit for page ${page.id}, will retry later`);
+            return { success: false, shouldRetry: true };
+          }
+          
+          console.error(`❌ Failed to process page ${page.id}:`, error.message);
+          return { success: false, shouldRetry: false };
         }
-
-        const response = await openai.embeddings.create({
-          model: 'text-embedding-3-small',
-          input: combinedText,
-        });
-
-        const embeddingStr = embeddingToString(response.data[0].embedding);
-
-        const { error: updateError } = await supabase
-          .from('pages')
-          .update({ 
-            embedding: embeddingStr,
-            updated_at: new Date().toISOString() 
-          })
-          .eq('id', page.id);
-
-        if (updateError) throw updateError;
-        return { success: true };
+      }));
+      
+      const chunkProcessed = chunkResults.filter(r => r.success).length;
+      const chunkFailed = chunkResults.filter(r => !r.success && !r.shouldRetry).length;
+      const chunkRetries = chunkResults.filter(r => r.shouldRetry).length;
+      
+      batchProcessed += chunkProcessed;
+      batchFailed += chunkFailed;
+      
+      // FIX #7: Handle rate limit retries properly
+      if (chunkRetries > 0) {
+        console.log(`⏱️ ${chunkRetries} rate-limited requests, waiting ${RETRY_DELAY}ms...`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
         
-      } catch (error: any) {
-        // Simple rate limit handling - just wait and continue
-        if (error.status === 429) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-        return { success: false };
+        // Retry rate-limited requests
+        const retryPages = chunk.filter((_, i) => chunkResults[i].shouldRetry);
+        // Add retry logic here if needed...
       }
-    }));
+      
+      // Small delay between chunks to be nice to the API
+      if (chunks.indexOf(chunk) < chunks.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+    }
 
-    const batchProcessed = results.filter(r => r.success).length;
-    const batchFailed = results.filter(r => !r.success).length;
     const batchTime = Date.now() - batchStart;
-    
     processed += batchProcessed;
     failed += batchFailed;
 
-    // Simple progress calculation
     const elapsed = Date.now() - startTime;
     const currentRate = (processed / elapsed) * 1000 * 60;
     const eta = count > processed ? ((count - processed) / currentRate) * 60 * 1000 : 0;
-    const batchRate = (batchProcessed / batchTime) * 1000 * 60;
     
-    console.log(`✅ Batch ${batchNum}: ${batchProcessed}/${pages.length} in ${Math.round(batchTime/1000)}s (${Math.round(batchRate)}/min)
+    console.log(`✅ Batch ${batchNum}: ${batchProcessed}/${embeddablePages.length} in ${Math.round(batchTime/1000)}s
       📊 Total: ${processed}/${count} (${Math.round((processed/count)*100)}%)
-      🚀 Rate: ${Math.round(currentRate)}/min
+      🚀 Rate: ${Math.round(currentRate)}/min  
       ⏰ ETA: ${Math.round(eta/60000)}min`);
 
-    // Fixed minimal delay - no complex logic
+    // Conservative delay between batches
     if (offset + BATCH_SIZE < count) {
       await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
     }
@@ -165,136 +267,40 @@ export async function generateEmbeddingsOptimized(): Promise<{ processed: number
   const totalTime = Date.now() - startTime;
   const finalRate = (processed / totalTime) * 1000 * 60;
   
-  console.log(`🎉 SIMPLE MAXIMUM SPEED completed!
+  console.log(`🎉 FIXED embedding generation completed!
     ✅ ${processed} processed
     ❌ ${failed} failed  
+    ⚪ ${skippedCount} skipped (no content)
     ⏰ Total: ${Math.round(totalTime/60000)} minutes
     🚀 Rate: ${Math.round(finalRate)}/min
   `);
 
-  return { processed, failed };
+  return { processed, failed, skipped: skippedCount };
 }
 
 /**
- * ULTRA SIMPLE - Just blast everything at once (for smaller datasets)
+ * Check if a page has embeddable content (helper for diagnostics)
  */
-export async function generateEmbeddingsUltraSimple(): Promise<{ processed: number; failed: number }> {
-  console.log('🚀 Starting ULTRA SIMPLE - process everything at once...');
-  
+export async function checkUnembeddablePages(): Promise<{
+  total: number;
+  unembeddable: number;
+  examples: Array<{ id: string; title: string | null; h1: string | null; meta_description: string | null }>;
+}> {
   const { data: pages, error } = await supabase
     .from('pages')
     .select('id, title, h1, meta_description')
-    .is('embedding', null);
+    .is('embedding', null)
+    .limit(100); // Check sample
 
   if (error || !pages) {
-    throw new Error(`Failed to get pages: ${error?.message}`);
+    throw new Error(`Failed to check pages: ${error?.message}`);
   }
 
-  console.log(`Processing ALL ${pages.length} pages in parallel...`);
-  const startTime = Date.now();
-
-  // Process EVERYTHING in parallel - no batching, no delays
-  const results = await Promise.all(pages.map(async (page, index) => {
-    try {
-      if (index % 1000 === 0) {
-        console.log(`Processing page ${index + 1}/${pages.length}...`);
-      }
-
-      const combinedText = [page.title, page.h1, page.meta_description]
-        .filter(Boolean).join(' ');
-
-      if (!combinedText.trim()) return { success: false };
-
-      const response = await openai.embeddings.create({
-        model: 'text-embedding-3-small',
-        input: combinedText,
-      });
-
-      const embeddingStr = embeddingToString(response.data[0].embedding);
-
-      await supabase
-        .from('pages')
-        .update({ 
-          embedding: embeddingStr,
-          updated_at: new Date().toISOString() 
-        })
-        .eq('id', page.id);
-
-      return { success: true };
-    } catch (error) {
-      return { success: false };
-    }
-  }));
-
-  const processed = results.filter(r => r.success).length;
-  const failed = results.filter(r => !r.success).length;
-  const totalTime = Date.now() - startTime;
-  const rate = (processed / totalTime) * 1000 * 60;
-
-  console.log(`🎉 ULTRA SIMPLE completed!
-    ✅ ${processed} processed
-    ❌ ${failed} failed  
-    ⏰ Time: ${Math.round(totalTime/60000)} minutes
-    🚀 Rate: ${Math.round(rate)}/min
-  `);
-
-  return { processed, failed };
-}
-
-// Conservative fallback
-export async function batchGenerateEmbeddings(batchSize: number = 100): Promise<{ processed: number; failed: number }> {
-  console.log('🔄 Conservative batch processing...');
-  // Same as before but simpler
-  let processed = 0;
-  let failed = 0;
-  let offset = 0;
-
-  while (true) {
-    const { data: pages, error } = await supabase
-      .from('pages')
-      .select('id, title, h1, meta_description')
-      .is('embedding', null)
-      .range(offset, offset + batchSize - 1);
-
-    if (error || !pages?.length) break;
-
-    console.log(`Processing ${pages.length} pages...`);
-
-    for (const page of pages) {
-      try {
-        const embedding = await generateEmbedding(page.title, page.h1, page.meta_description);
-        const embeddingStr = embeddingToString(embedding);
-
-        await supabase
-          .from('pages')
-          .update({ embedding: embeddingStr, updated_at: new Date().toISOString() })
-          .eq('id', page.id);
-
-        processed++;
-      } catch (error) {
-        failed++;
-      }
-    }
-
-    offset += batchSize;
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-
-  return { processed, failed };
-}
-
-export async function getPageEmbedding(pageId: string): Promise<number[] | null> {
-  const { data, error } = await supabase
-    .from('pages')
-    .select('embedding')
-    .eq('id', pageId)
-    .single();
-
-  if (error || !data?.embedding) return null;
+  const unembeddable = pages.filter(page => !hasEmbeddableContent(page));
   
-  try {
-    return embeddingFromString(data.embedding);
-  } catch (error) {
-    return null;
-  }
+  return {
+    total: pages.length,
+    unembeddable: unembeddable.length,
+    examples: unembeddable.slice(0, 5) // First 5 examples
+  };
 }

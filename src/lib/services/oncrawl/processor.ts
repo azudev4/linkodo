@@ -1,33 +1,67 @@
-// src/lib/services/oncrawl/processor.ts - COMPLETE FIXED VERSION
-
-import { OnCrawlPage, OnCrawlClient } from './client';
+// src/lib/services/oncrawl/processor.ts - ENHANCED WITH CONTENT FILTERING
+import { OnCrawlClient } from './client';
+import { OnCrawlPage, ProcessedOnCrawlPage, SyncResult, ContentValidationResult, FilterStats, FilterExamples, FilterResult } from './types';
 import { supabase } from '@/lib/db/client';
-import { shouldExcludeUrl, getExclusionReason, isForumContent, EXCLUDED_URL_PHRASES, SITE_SPECIFIC_EXCLUDED_PATTERNS } from '@/lib/utils/linkfilter';
+import { isForumContent, EXCLUDED_URL_PHRASES, SITE_SPECIFIC_EXCLUDED_PATTERNS } from '@/lib/utils/linkfilter';
 
-export interface ProcessedOnCrawlPage {
-  url: string;
-  title: string | null;
-  metaDescription: string | null;
-  h1: string | null;
-  wordCount: number | null;
-  category: string;
+/**
+ * 🆕 NEW: Check if a page has embeddable content
+ * This prevents unembeddable pages from entering the database
+ */
+function hasEmbeddableContent(page: OnCrawlPage): boolean {
+  const title = page.title?.trim();
+  const h1 = page.h1?.trim();
+  const metaDescription = page.meta_description?.trim();
   
-  // SEO metrics for internal linking strategy
-  depth: number | null;
-  inrankDecimal: number | null;
-  internalOutlinks: number | null;
-  nbInlinks: number | null;
+  // Must have at least one non-empty content field
+  return !!(title || h1 || metaDescription);
 }
 
-export interface SyncResult {
-  added: number;
-  updated: number;
-  unchanged: number;
-  failed: number;
-  removed: number;
-  processed: number;
-  syncHistoryId: number;
-  durationMs: number;
+/**
+ * 🆕 NEW: Enhanced content validation with detailed logging
+ */
+function validatePageContent(page: OnCrawlPage): ContentValidationResult {
+  const title = page.title?.trim();
+  const h1 = page.h1?.trim();
+  const metaDescription = page.meta_description?.trim();
+  
+  const hasTitle = !!title;
+  const hasH1 = !!h1;
+  const hasMetaDescription = !!metaDescription;
+  
+  const combinedText = [title, h1, metaDescription].filter(Boolean).join(' ');
+  const combinedLength = combinedText.length;
+  
+  if (combinedLength === 0) {
+    return {
+      isValid: false,
+      reason: 'No embeddable content (title, h1, meta_description all empty)',
+      hasTitle,
+      hasH1,
+      hasMetaDescription,
+      combinedLength
+    };
+  }
+  
+  // Optional: Check for minimum content length
+  if (combinedLength < 3) {
+    return {
+      isValid: false,
+      reason: `Content too short (${combinedLength} chars)`,
+      hasTitle,
+      hasH1,
+      hasMetaDescription,
+      combinedLength
+    };
+  }
+  
+  return {
+    isValid: true,
+    hasTitle,
+    hasH1,
+    hasMetaDescription,
+    combinedLength
+  };
 }
 
 /**
@@ -117,7 +151,7 @@ function hasPageChanged(existing: any, newPage: ProcessedOnCrawlPage): boolean {
 }
 
 /**
- * ✅ FIXED: Create sync history record (let DB auto-generate ID)
+ * Create sync history record
  */
 async function createSyncHistoryRecord(
   projectId: string,
@@ -135,7 +169,6 @@ async function createSyncHistoryRecord(
       crawl_id: crawlId,
       crawl_name: crawlName || 'Unnamed crawl',
       synced_at: new Date().toISOString(),
-      // Initialize all counters to 0 - will be updated at the end
       pages_added: 0,
       pages_updated: 0,
       pages_unchanged: 0,
@@ -156,7 +189,7 @@ async function createSyncHistoryRecord(
 }
 
 /**
- * ✅ FIXED: Update sync history record with final results
+ * Update sync history record with final results
  */
 async function updateSyncHistoryRecord(
   syncHistoryId: number,
@@ -179,15 +212,8 @@ async function updateSyncHistoryRecord(
 
   if (error) {
     console.error(`❌ Failed to update sync history record:`, error);
-    // Don't throw - sync succeeded, just logging failed
   } else {
-    console.log(`📝 ✅ Successfully updated sync history record ${syncHistoryId} with results:
-      ✨ ${result.added} added
-      🔄 ${result.updated} updated
-      ⚪ ${result.unchanged} unchanged
-      🗑️  ${result.removed} removed
-      ❌ ${result.failed} failed
-      ⏱️  ${durationMs}ms duration`);
+    console.log(`📝 ✅ Successfully updated sync history record ${syncHistoryId}`);
   }
 }
 
@@ -247,69 +273,149 @@ async function optimizedFetchExistingPages(): Promise<Map<string, any>> {
 }
 
 /**
- * OPTIMIZED filtering with pre-compiled patterns
+ * 🆕 ENHANCED: Filtering with detailed content validation and statistics
  */
-function optimizedFilterPages(pages: OnCrawlPage[]): ProcessedOnCrawlPage[] {
-  console.log(`🔍 Starting OPTIMIZED filtering of ${pages.length} pages...`);
+function optimizedFilterPages(pages: OnCrawlPage[]): FilterResult {
+  console.log(`🔍 Starting ENHANCED filtering with content validation of ${pages.length} pages...`);
   const startTime = Date.now();
   
+  // Pre-compile patterns for performance
   const excludedPhrasesSet = new Set(EXCLUDED_URL_PHRASES.map(p => p.toLowerCase()));
   const sitePatternSet = new Set(SITE_SPECIFIC_EXCLUDED_PATTERNS);
   
-  const shouldExcludeFast = (url: string, metaDescription?: string): boolean => {
-    if (!url || url.length < 8) return true;
-    
-    if (url.includes('\n') || url.includes('\r') || url.includes(';200;') || !url.startsWith('http')) {
-      return true;
-    }
-    
-    const lowerUrl = url.toLowerCase();
-    
-    for (const phrase of excludedPhrasesSet) {
-      if (lowerUrl.includes(phrase)) return true;
-    }
-    
-    const pathStart = url.indexOf('/', 8);
-    if (pathStart !== -1) {
-      const pathname = url.substring(pathStart).toLowerCase();
-      for (const pattern of sitePatternSet) {
-        if (pathname.includes(pattern)) return true;
-      }
-    }
-    
-    if (metaDescription && isForumContent(metaDescription)) return true;
-    
-    return false;
+  const indexablePages: ProcessedOnCrawlPage[] = [];
+  const stats = {
+    total: pages.length,
+    filteredNoContent: 0,
+    filteredUrlPatterns: 0,
+    filteredForumContent: 0,
+    filteredStatusCode: 0,
+    kept: 0
   };
   
-  const indexablePages: ProcessedOnCrawlPage[] = [];
-  let excluded = 0;
+  const examples = {
+    noContent: [] as Array<{ url: string; reason: string }>,
+    urlPatterns: [] as Array<{ url: string; reason: string }>,
+    forumContent: [] as Array<{ url: string; reason: string }>
+  };
   
   for (const page of pages) {
     const url = page.url;
     
-    if (shouldExcludeFast(url, page.meta_description ?? undefined)) {
-      excluded++;
-      continue;
-    }
-    
+    // 1. Check status code first
     const statusCode = page.status_code ? parseInt(page.status_code) : null;
     if (statusCode && statusCode !== 200) {
-      excluded++;
+      stats.filteredStatusCode++;
       continue;
     }
     
+    // 2. 🆕 NEW: Check for embeddable content FIRST (most important filter)
+    const contentValidation = validatePageContent(page);
+    if (!contentValidation.isValid) {
+      stats.filteredNoContent++;
+      
+      // Collect examples for debugging
+      if (examples.noContent.length < 10) {
+        examples.noContent.push({
+          url: url.substring(0, 80) + (url.length > 80 ? '...' : ''),
+          reason: contentValidation.reason || 'No content'
+        });
+      }
+      
+      continue;
+    }
+    
+    // 3. Check URL patterns
+    if (!url || url.length < 8) {
+      stats.filteredUrlPatterns++;
+      continue;
+    }
+    
+    if (url.includes('\n') || url.includes('\r') || url.includes(';200;') || !url.startsWith('http')) {
+      stats.filteredUrlPatterns++;
+      continue;
+    }
+    
+    const lowerUrl = url.toLowerCase();
+    let urlExcluded = false;
+    let urlExclusionReason = '';
+    
+    for (const phrase of excludedPhrasesSet) {
+      if (lowerUrl.includes(phrase)) {
+        urlExcluded = true;
+        urlExclusionReason = `Contains excluded phrase: ${phrase}`;
+        break;
+      }
+    }
+    
+    if (!urlExcluded) {
+      const pathStart = url.indexOf('/', 8);
+      if (pathStart !== -1) {
+        const pathname = url.substring(pathStart).toLowerCase();
+        for (const pattern of sitePatternSet) {
+          if (pathname.includes(pattern)) {
+            urlExcluded = true;
+            urlExclusionReason = `Site-specific pattern: ${pattern}`;
+            break;
+          }
+        }
+      }
+    }
+    
+    if (urlExcluded) {
+      stats.filteredUrlPatterns++;
+      
+      if (examples.urlPatterns.length < 10) {
+        examples.urlPatterns.push({
+          url: url.substring(0, 60) + (url.length > 60 ? '...' : ''),
+          reason: urlExclusionReason
+        });
+      }
+      
+      continue;
+    }
+    
+    // 4. Check forum content
+    if (page.meta_description && isForumContent(page.meta_description)) {
+      stats.filteredForumContent++;
+      
+      if (examples.forumContent.length < 10) {
+        examples.forumContent.push({
+          url: url.substring(0, 60) + (url.length > 60 ? '...' : ''),
+          reason: 'Forum content detected in meta description'
+        });
+      }
+      
+      continue;
+    }
+    
+    // 5. Page passed all filters - process it
     indexablePages.push(processOnCrawlPage(page));
+    stats.kept++;
   }
   
   const duration = Date.now() - startTime;
-  console.log(`🔍 Optimized filtering completed: ${indexablePages.length} kept, ${excluded} excluded in ${duration}ms`);
   
-  return indexablePages;
+  console.log(`🔍 ENHANCED filtering completed in ${duration}ms:
+    📊 Total: ${stats.total}
+    🚫 Filtered out:
+      💭 No content: ${stats.filteredNoContent} (${Math.round(stats.filteredNoContent/stats.total*100)}%)
+      🔗 URL patterns: ${stats.filteredUrlPatterns} (${Math.round(stats.filteredUrlPatterns/stats.total*100)}%)
+      💬 Forum content: ${stats.filteredForumContent} (${Math.round(stats.filteredForumContent/stats.total*100)}%)
+      🔴 Status codes: ${stats.filteredStatusCode} (${Math.round(stats.filteredStatusCode/stats.total*100)}%)
+    ✅ Kept: ${stats.kept} (${Math.round(stats.kept/stats.total*100)}%)
+  `);
+  
+  // Log some examples for debugging
+  if (examples.noContent.length > 0) {
+    console.log(`💭 No content examples: ${examples.noContent.slice(0, 3).map(e => `${e.url} (${e.reason})`).join(', ')}`);
+  }
+  
+  return { indexablePages, stats, examples };
 }
 
 /**
- * ✅ FIXED: Batch insert new pages WITHOUT last_crawled or sync_history_id
+ * Batch insert new pages
  */
 async function batchInsertNewPages(
   pages: ProcessedOnCrawlPage[],
@@ -335,7 +441,6 @@ async function batchInsertNewPages(
         nb_inlinks: page.nbInlinks,
         embedding: null,
         updated_at: new Date().toISOString()
-        // ✅ No last_crawled, no sync_history_id
       }));
 
       const { error } = await supabase
@@ -360,7 +465,7 @@ async function batchInsertNewPages(
 }
 
 /**
- * ✅ FIXED: Batch update changed pages WITHOUT last_crawled or sync_history_id
+ * Batch update changed pages
  */
 async function batchUpdateChangedPages(
   pages: ProcessedOnCrawlPage[],
@@ -388,9 +493,8 @@ async function batchUpdateChangedPages(
           inrank_decimal: page.inrankDecimal,
           internal_outlinks: page.internalOutlinks,
           nb_inlinks: page.nbInlinks,
-          embedding: existing?.embedding || null, // ✅ Preserve existing embedding
+          embedding: existing?.embedding || null,
           updated_at: new Date().toISOString()
-          // ✅ No last_crawled, no sync_history_id
         };
       });
 
@@ -457,61 +561,54 @@ async function batchRemoveStalePages(
 }
 
 /**
- * ✅ FIXED: Smart sync with standalone sync history tracking
+ * 🆕 ENHANCED: Smart sync with content filtering statistics
  */
 async function optimizedSmartSync(
   pages: ProcessedOnCrawlPage[], 
-  syncHistoryId: number
+  syncHistoryId: number,
+  filterStats: FilterStats
 ): Promise<{
   added: number; updated: number; unchanged: number; failed: number; removed: number;
+  filteredNoContent: number; filteredUrlPatterns: number; filteredForumContent: number;
 }> {
-  console.log(`🧠 Starting OPTIMIZED smart sync for ${pages.length} pages (sync history: ${syncHistoryId})...`);
+  console.log(`🧠 Starting ENHANCED smart sync for ${pages.length} pages (sync history: ${syncHistoryId})...`);
   const startTime = Date.now();
   
-  // 1. Fetch ALL existing pages
   const existingPageMap = await optimizedFetchExistingPages();
   const allExistingUrls = new Set(existingPageMap.keys());
   
-  console.log(`📊 Database state: ${existingPageMap.size} existing pages, processing ${pages.length} OnCrawl pages`);
+  console.log(`📊 Database state: ${existingPageMap.size} existing pages, processing ${pages.length} filtered pages`);
   
-  // 2. Categorize pages
+  // Categorize pages
   const currentUrls = new Set(pages.map(p => p.url));
   const newPages: ProcessedOnCrawlPage[] = [];
   const changedPages: ProcessedOnCrawlPage[] = [];
   const unchangedPages: ProcessedOnCrawlPage[] = [];
-  
-  let exampleNew = '';
-  let exampleChanged = '';
-  let exampleUnchanged = '';
   
   for (const page of pages) {
     const existing = existingPageMap.get(page.url);
     
     if (!existing) {
       newPages.push(page);
-      if (!exampleNew) exampleNew = page.url;
     } else if (hasPageChanged(existing, page)) {
       changedPages.push(page);
-      if (!exampleChanged) exampleChanged = page.url;
     } else {
       unchangedPages.push(page);
-      if (!exampleUnchanged) exampleUnchanged = page.url;
     }
   }
   
-  // 3. Find stale pages
   const staleUrls = Array.from(allExistingUrls).filter(url => !currentUrls.has(url));
   
   console.log(`📊 Categorization (sync history: ${syncHistoryId}):
-    ✨ ${newPages.length} new pages ${exampleNew ? `(e.g., ${exampleNew.substring(0, 60)}...)` : ''}
-    🔄 ${changedPages.length} changed pages ${exampleChanged ? `(e.g., ${exampleChanged.substring(0, 60)}...)` : ''}
-    ⚪ ${unchangedPages.length} unchanged pages ${exampleUnchanged ? `(e.g., ${exampleUnchanged.substring(0, 60)}...)` : ''}
+    ✨ ${newPages.length} new pages
+    🔄 ${changedPages.length} changed pages
+    ⚪ ${unchangedPages.length} unchanged pages
     🗑️  ${staleUrls.length} stale pages
   `);
 
   let added = 0, updated = 0, unchanged = unchangedPages.length, failed = 0, removed = 0;
 
-  // 4. Execute operations - ONLY touch pages that need changes
+  // Execute operations
   if (newPages.length > 0) {
     console.log(`📥 Inserting ${newPages.length} new pages (sync ${syncHistoryId})...`);
     const insertResult = await batchInsertNewPages(newPages);
@@ -526,7 +623,6 @@ async function optimizedSmartSync(
     failed += updateResult.failed;
   }
 
-  // ✅ FIXED: Don't touch unchanged pages at all!
   if (unchangedPages.length > 0) {
     console.log(`⚪ ${unchangedPages.length} unchanged pages (SKIPPED - no database writes needed!)`);
   }
@@ -539,15 +635,24 @@ async function optimizedSmartSync(
   }
 
   const duration = Date.now() - startTime;
-  console.log(`✅ Smart sync completed in ${duration}ms (sync history: ${syncHistoryId}):
+  console.log(`✅ Enhanced smart sync completed in ${duration}ms (sync history: ${syncHistoryId}):
     ✨ ${added} added
     🔄 ${updated} updated  
-    ⚪ ${unchanged} unchanged (NOT TOUCHED!)
+    ⚪ ${unchanged} unchanged
     🗑️  ${removed} removed (stale)
     ❌ ${failed} failed
   `);
 
-  return { added, updated, unchanged, failed, removed };
+  return { 
+    added, 
+    updated, 
+    unchanged, 
+    failed, 
+    removed,
+    filteredNoContent: filterStats.filteredNoContent,
+    filteredUrlPatterns: filterStats.filteredUrlPatterns,
+    filteredForumContent: filterStats.filteredForumContent
+  };
 }
 
 /**
@@ -566,7 +671,7 @@ async function getProjectName(projectId: string): Promise<string> {
 }
 
 /**
- * ✅ MAIN FIXED SYNC FUNCTION - With proper standalone sync history tracking
+ * 🆕 MAIN ENHANCED SYNC FUNCTION - Now filters unembeddable content at source
  */
 export async function syncPagesFromOnCrawlOptimized(
   projectId: string,
@@ -574,7 +679,7 @@ export async function syncPagesFromOnCrawlOptimized(
 ): Promise<SyncResult> {
   const client = new OnCrawlClient(process.env.ONCRAWL_API_TOKEN!);
   
-  console.log(`🚀 Starting OPTIMIZED sync with standalone sync history for project: ${projectId}`);
+  console.log(`🚀 Starting ENHANCED sync with content filtering for project: ${projectId}`);
   const overallStartTime = Date.now();
   
   // 1. Fetch raw data from OnCrawl
@@ -583,12 +688,11 @@ export async function syncPagesFromOnCrawlOptimized(
   const { crawl, pages } = await client.getLatestAccessibleCrawlData(projectId);
   const fetchDuration = Date.now() - fetchStartTime;
   
-  // Get project name for sync history
   const projectName = await getProjectName(projectId);
   
   console.log(`📡 Fetched ${pages.length} pages from crawl: ${crawl.id} (${crawl.name || 'Unnamed crawl'}) in ${fetchDuration}ms`);
   
-  // ✅ 2. CREATE SYNC HISTORY RECORD
+  // 2. Create sync history record
   const syncHistoryId = await createSyncHistoryRecord(
     projectId,
     projectName,
@@ -597,39 +701,40 @@ export async function syncPagesFromOnCrawlOptimized(
   );
   
   try {
-    // 3. OPTIMIZED filtering and processing
-    console.log(`🔍 Starting optimized filtering...`);
+    // 3. 🆕 ENHANCED filtering with content validation
+    console.log(`🔍 Starting enhanced filtering with content validation...`);
     const filterStartTime = Date.now();
-    const indexablePages = optimizedFilterPages(pages);
+    const { indexablePages, stats: filterStats, examples } = optimizedFilterPages(pages);
     const filterDuration = Date.now() - filterStartTime;
-    console.log(`🔍 OPTIMIZED filtering completed: ${indexablePages.length} kept, ${pages.length - indexablePages.length} excluded in ${filterDuration}ms`);
     
-    // 4. OPTIMIZED database sync with standalone sync history
-    console.log(`💾 Starting optimized database sync with sync history ${syncHistoryId}...`);
+    console.log(`🔍 ENHANCED filtering completed: ${indexablePages.length} kept, ${pages.length - indexablePages.length} excluded in ${filterDuration}ms`);
+    
+    // 4. Enhanced database sync
+    console.log(`💾 Starting enhanced database sync with sync history ${syncHistoryId}...`);
     const syncStartTime = Date.now();
-    const result = await optimizedSmartSync(indexablePages, syncHistoryId);
+    const result = await optimizedSmartSync(indexablePages, syncHistoryId, filterStats);
     const syncDuration = Date.now() - syncStartTime;
     
     const overallDuration = Date.now() - overallStartTime;
-    const pagesPerSecond = overallDuration > 0 ? Math.round((result.added + result.updated + result.unchanged) / (overallDuration / 1000)) : 0;
     
-    // ✅ 5. UPDATE SYNC HISTORY WITH FINAL RESULTS
+    // 5. Update sync history with final results
     await updateSyncHistoryRecord(syncHistoryId, result, overallDuration);
     
-    console.log(`🎉 OPTIMIZED sync with standalone sync history completed in ${overallDuration}ms:
+    console.log(`🎉 ENHANCED sync with content filtering completed in ${overallDuration}ms:
       📝 Sync History ID: ${syncHistoryId} ✅
       📡 OnCrawl fetch: ${fetchDuration}ms
-      🔍 Filtering: ${filterDuration}ms (OPTIMIZED)
-      💾 Database sync: ${syncDuration}ms (OPTIMIZED - no unnecessary page touching!)
+      🔍 Enhanced filtering: ${filterDuration}ms
+        💭 No content filtered: ${result.filteredNoContent}
+        🔗 URL pattern filtered: ${result.filteredUrlPatterns}  
+        💬 Forum content filtered: ${result.filteredForumContent}
+      💾 Database sync: ${syncDuration}ms
       ✨ ${result.added} added
       🔄 ${result.updated} updated
-      ⚪ ${result.unchanged} unchanged (not touched!)
+      ⚪ ${result.unchanged} unchanged
       🗑️  ${result.removed} removed (stale)
       ❌ ${result.failed} failed
-      🚀 Performance: ${pagesPerSecond} pages/second (OPTIMIZED)
     `);
     
-    // Report final progress
     if (onProgress) {
       onProgress(result.added + result.updated + result.unchanged, indexablePages.length);
     }
@@ -642,11 +747,13 @@ export async function syncPagesFromOnCrawlOptimized(
       failed: result.failed,
       removed: result.removed,
       syncHistoryId,
-      durationMs: overallDuration
+      durationMs: overallDuration,
+      filteredNoContent: result.filteredNoContent,
+      filteredUrlPatterns: result.filteredUrlPatterns,
+      filteredForumContent: result.filteredForumContent
     };
     
   } catch (error) {
-    // If sync fails, still try to update sync history with error info
     const overallDuration = Date.now() - overallStartTime;
     await updateSyncHistoryRecord(syncHistoryId, {
       added: 0,
@@ -657,6 +764,6 @@ export async function syncPagesFromOnCrawlOptimized(
     }, overallDuration);
     
     console.error(`❌ Sync failed, updated sync history ${syncHistoryId} with error info`);
-    throw error; // Re-throw the original error
+    throw error;
   }
 }
