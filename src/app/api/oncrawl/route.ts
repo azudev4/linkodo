@@ -1,7 +1,9 @@
 // src/app/api/oncrawl/route.ts - OPTIMIZED VERSION
 import { NextRequest, NextResponse } from 'next/server';
-import { OnCrawlClient, OnCrawlPage } from '@/lib/services/oncrawl/client';
-import { syncPagesFromOnCrawlOptimized, determinePageCategory } from '@/lib/services/oncrawl/processor';
+import { OnCrawlClient } from '@/lib/services/oncrawl/client';
+import { OnCrawlPage, SyncMode } from '@/lib/services/oncrawl/types';
+import { syncPagesFromOnCrawlOptimized } from '@/lib/services/oncrawl/processor';
+import { determinePageCategory } from '@/lib/services/oncrawl/processing/page-normalizer';
 import { shouldExcludeUrl, getExclusionReason } from '@/lib/utils/linkfilter';
 import * as XLSX from 'xlsx';
 
@@ -159,7 +161,7 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * Handle POST requests - OPTIMIZED Sync data from latest accessible crawl
+ * Handle POST requests - OPTIMIZED Sync data with sync modes
  */
 export async function POST(request: NextRequest) {
   if (!process.env.ONCRAWL_API_TOKEN) {
@@ -167,35 +169,52 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { projectId } = await request.json();
+    const { projectId, syncMode } = await request.json();
     
     if (!projectId) {
       return NextResponse.json({ error: 'projectId required' }, { status: 400 });
     }
     
-    console.log(`🚀 Starting OPTIMIZED sync for project: ${projectId}`);
+    // Validate sync mode
+    const validSyncMode = syncMode && Object.values(SyncMode).includes(syncMode) 
+      ? syncMode as SyncMode 
+      : SyncMode.FULL;
+    
+    const syncModeLabel = validSyncMode === SyncMode.URL_ONLY ? 'URL-ONLY' : 'FULL';
+    console.log(`🚀 Starting ${syncModeLabel} sync for project: ${projectId}`);
     const startTime = Date.now();
     
-    // Use the new optimized sync function
-    const result = await syncPagesFromOnCrawlOptimized(projectId);
+    // Use the sync function with the specified mode
+    const result = await syncPagesFromOnCrawlOptimized(projectId, validSyncMode);
     
     const duration = Date.now() - startTime;
+    const rate = duration > 0 ? Math.round(result.processed / (duration / 1000)) : 0;
+    const speedNote = validSyncMode === SyncMode.URL_ONLY ? ' (⚡ URL-only mode)' : '';
     
-    console.log(`✅ Optimized sync completed in ${duration}ms:
-      📥 Processed: ${result.processed} pages
+    console.log(`✅ ${syncModeLabel} sync completed in ${duration}ms${speedNote}:
+      📥 Added: ${result.added} pages
+      🔄 Updated: ${result.updated} pages
+      ⚪ Unchanged: ${result.unchanged} pages
+      🗑️  Removed: ${result.removed} pages
       ❌ Failed: ${result.failed} pages
+      📊 Rate: ${rate} pages/sec
     `);
     
     return NextResponse.json({
       success: true,
       processed: result.processed,
+      added: result.added,
+      updated: result.updated,
+      unchanged: result.unchanged,
+      removed: result.removed,
       failed: result.failed,
       duration_ms: duration,
-      message: `Successfully synced ${result.processed} pages from latest accessible crawl in ${duration}ms`
+      syncMode: validSyncMode,
+      message: `Successfully completed ${syncModeLabel} sync: ${result.processed} pages processed in ${duration}ms${speedNote}`
     });
     
   } catch (error: any) {
-    console.error('OnCrawl optimized sync error:', error);
+    console.error('OnCrawl sync error:', error);
     return NextResponse.json({ 
       error: error.message || 'Failed to sync data from latest accessible crawl' 
     }, { status: 500 });

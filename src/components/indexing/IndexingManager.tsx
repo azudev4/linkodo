@@ -6,10 +6,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
+import { SyncMode } from '@/lib/services/oncrawl/types';
 import { 
   Database, 
   Download, 
@@ -19,9 +19,10 @@ import {
   Sparkles, 
   RefreshCw,
   BarChart3,
-  Clock,
   Zap,
-  FileText
+  FileText,
+  Zap as ZapIcon,
+  HelpCircle
 } from 'lucide-react';
 
 interface OnCrawlProject {
@@ -104,7 +105,7 @@ export function IndexingManager() {
     }
   };
 
-  const handleSync = async () => {
+  const handleSyncWithMode = async (syncMode: SyncMode) => {
     if (!selectedProject) return;
     
     setIsSyncing(true);
@@ -116,7 +117,8 @@ export function IndexingManager() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          projectId: selectedProject
+          projectId: selectedProject,
+          syncMode
         })
       });
       
@@ -135,11 +137,13 @@ export function IndexingManager() {
         if (data.updated > 0) parts.push(`🔄 ${data.updated} updated`);
         if (data.unchanged > 0) parts.push(`⚪ ${data.unchanged} unchanged`);
         if (data.failed > 0) parts.push(`❌ ${data.failed} failed`);
+        if (data.removed > 0) parts.push(`🗑️ ${data.removed} removed`);
         
         const breakdown = parts.length > 0 ? parts.join(', ') : 'No changes';
+        const modeLabel = data.syncMode === SyncMode.URL_ONLY ? '⚡ Quick' : '🔄 Full';
         
         setSuccess(
-          `🚀 Smart sync completed in ${duration}ms (${rate} pages/sec): ${breakdown}`
+          `${modeLabel} sync completed in ${duration}ms (${rate} pages/sec): ${breakdown}`
         );
         
         await loadStats();
@@ -414,25 +418,75 @@ export function IndexingManager() {
           )}
 
           {/* Sync Actions */}
-          <div className="flex gap-3">
-            <Button
-              onClick={handleSync}
-              disabled={!selectedProject || isSyncing || isLoading}
-              className="flex-1 h-12 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
-              size="lg"
-            >
-              {isSyncing ? (
-                <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  <span className="font-medium">Syncing...</span>
-                </>
-              ) : (
-                <>
-                  <Download className="w-5 h-5 mr-2" />
-                  <span className="font-medium">Sync Latest Accessible Crawl</span>
-                </>
-              )}
-            </Button>
+          <div className="space-y-3">
+            <div className="flex gap-3">
+              <Button
+                onClick={() => handleSyncWithMode(SyncMode.URL_ONLY)}
+                disabled={!selectedProject || isSyncing || isLoading}
+                className="flex-[2] h-14 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 text-lg"
+                size="lg"
+              >
+                {isSyncing ? (
+                  <>
+                    <Loader2 className="w-6 h-6 mr-2 animate-spin" />
+                    <span className="font-medium">Syncing...</span>
+                  </>
+                ) : (
+                  <>
+                    <ZapIcon className="w-6 h-6 mr-2" />
+                    <span className="font-medium">Quick Sync</span>
+                  </>
+                )}
+              </Button>
+
+              <Button
+                onClick={() => handleSyncWithMode(SyncMode.FULL)}
+                disabled={!selectedProject || isSyncing || isLoading}
+                className="flex-1 h-12 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
+                size="lg"
+              >
+                {isSyncing ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    <span className="font-medium">Syncing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-5 h-5 mr-2" />
+                    <span className="font-medium">Full Sync</span>
+                  </>
+                )}
+              </Button>
+            </div>
+
+            <div className="text-sm text-gray-600 space-y-1.5 pl-1">
+              <div className="flex items-center">
+                <ZapIcon className="w-4 h-4 mr-1.5 text-emerald-500" />
+                <span className="font-medium text-gray-700">Quick Sync:</span>
+                <span className="ml-1.5">Updates page URLs only - <span className="font-medium text-emerald-600">10x faster</span></span>
+              </div>
+              <div className="flex items-center">
+                <Download className="w-4 h-4 mr-1.5 text-blue-500" />
+                <span className="font-medium text-gray-700">Full Sync:</span>
+                <span className="ml-1.5">Updates all content & metadata</span>
+                <HoverCard>
+                  <HoverCardTrigger>
+                    <HelpCircle className="w-4 h-4 ml-1.5 text-gray-400 hover:text-gray-600 cursor-help" />
+                  </HoverCardTrigger>
+                  <HoverCardContent className="w-80">
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">When to use Full Sync:</p>
+                      <ul className="text-sm text-gray-500 list-disc pl-4 space-y-1">
+                        <li>You've updated page titles or meta descriptions</li>
+                        <li>Content has changed significantly</li>
+                        <li>You need fresh word counts or depth values</li>
+                        <li>Internal linking structure has changed</li>
+                      </ul>
+                    </div>
+                  </HoverCardContent>
+                </HoverCard>
+              </div>
+            </div>
           </div>
 
           {/* Download Options */}

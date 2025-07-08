@@ -3,6 +3,14 @@
  */
 
 /**
+ * Sync mode for controlling the depth of synchronization
+ */
+export enum SyncMode {
+  URL_ONLY = 'url_only',    // Fast: just add/remove pages
+  FULL = 'full'             // Thorough: compare all content fields
+}
+
+/**
  * Raw page data from OnCrawl API
  */
 export interface OnCrawlPage {
