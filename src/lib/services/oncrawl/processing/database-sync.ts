@@ -178,6 +178,12 @@ export async function directUpdateChangedPages(
       const updatePromises = batch.map(async (page) => {
         const existing = existingPageMap.get(page.url);
         
+        // Check if content changed (invalidates embedding)
+        const titleChanged = existing?.title !== page.title;
+        const h1Changed = existing?.h1 !== page.h1;
+        const metaChanged = existing?.meta_description !== page.metaDescription;
+        const contentChanged = titleChanged || h1Changed || metaChanged;
+
         const { error } = await supabase
           .from('pages')
           .update({
@@ -190,8 +196,8 @@ export async function directUpdateChangedPages(
             inrank_decimal: page.inrankDecimal,
             internal_outlinks: page.internalOutlinks,
             nb_inlinks: page.nbInlinks,
-            // Preserve existing embedding
-            embedding: existing?.embedding || null,
+            // Clear embedding if content changed
+            embedding: contentChanged ? null : existing?.embedding,
             updated_at: new Date().toISOString()
           })
           .eq('project_name', projectName)

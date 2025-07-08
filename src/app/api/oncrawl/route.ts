@@ -4,7 +4,7 @@ import { OnCrawlClient } from '@/lib/services/oncrawl/client';
 import { OnCrawlPage, SyncMode } from '@/lib/services/oncrawl/types';
 import { syncPagesFromOnCrawlOptimized } from '@/lib/services/oncrawl/processor';
 import { determinePageCategory } from '@/lib/services/oncrawl/processing/page-normalizer';
-import { shouldExcludeUrl, getExclusionReason } from '@/lib/utils/linkfilter';
+import { shouldExcludeUrl, getExclusionReason } from '@/lib/services/oncrawl/processing/filtering/linkfilter';
 import * as XLSX from 'xlsx';
 
 // Cache for category determinations
@@ -35,16 +35,23 @@ function generateExcel(pages: OnCrawlPage[]): Buffer {
 
     // Quick exclusion check without unnecessary string operations
     const statusCode = page.status_code ? parseInt(page.status_code) : 0;
-    const shouldExclude = !url || 
-      (statusCode && statusCode !== 200) || 
-      shouldExcludeUrl(url, page.title || undefined, page.meta_description || undefined);
+    const shouldExclude = !url || shouldExcludeUrl(
+      url, 
+      page.title || undefined, 
+      page.meta_description || undefined,
+      page.h1 || undefined,
+      statusCode || undefined
+    );
 
     // Only get exclusion reason if actually excluded
     const exclusionReason = shouldExclude ? 
-      (!url ? 'No URL' : 
-        (statusCode && statusCode !== 200) ? `Status code: ${statusCode}` : 
-        getExclusionReason(url, page.title || undefined, page.meta_description || undefined)
-      ) : '';
+      (!url ? 'No URL' : getExclusionReason(
+        url, 
+        page.title || undefined, 
+        page.meta_description || undefined,
+        page.h1 || undefined,
+        statusCode || undefined
+      )) : '';
     
     // Return minimal object with only necessary transformations
     return {
@@ -200,23 +207,19 @@ export async function POST(request: NextRequest) {
       📊 Rate: ${rate} pages/sec
     `);
     
-    return NextResponse.json({
-      success: true,
-      processed: result.processed,
-      added: result.added,
-      updated: result.updated,
-      unchanged: result.unchanged,
-      removed: result.removed,
-      failed: result.failed,
-      duration_ms: duration,
-      syncMode: validSyncMode,
-      message: `Successfully completed ${syncModeLabel} sync: ${result.processed} pages processed in ${duration}ms${speedNote}`
+    return NextResponse.json({ 
+      success: true, 
+      result: {
+        ...result,
+        duration,
+        rate
+      }
     });
     
   } catch (error: any) {
     console.error('OnCrawl sync error:', error);
     return NextResponse.json({ 
-      error: error.message || 'Failed to sync data from latest accessible crawl' 
+      error: error.message || 'Failed to sync data' 
     }, { status: 500 });
   }
 }

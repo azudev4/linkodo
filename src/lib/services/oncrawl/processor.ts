@@ -1,9 +1,10 @@
 // src/lib/services/oncrawl/processor.ts - REFACTORED CLEAN VERSION
 import { OnCrawlClient } from './client';
-import { SyncResult, SyncMode } from './types';
-import { optimizedFilterPages } from './processing/content-filter';
+import { SyncResult, SyncMode, OnCrawlPage, ProcessedOnCrawlPage, FilterStats } from './types';
+import { shouldExcludeUrl } from '@/lib/services/oncrawl/processing/filtering/linkfilter';
 import { optimizedSmartSync, optimizedUrlOnlySync } from './processing/database-sync';
 import { createSyncHistoryRecord, updateSyncHistoryRecord, getProjectName } from './processing/sync-history';
+import { processOnCrawlPage } from './processing/page-normalizer';
 
 /**
  * MAIN ENHANCED SYNC FUNCTION - Now clean and modular with sync modes
@@ -25,7 +26,7 @@ export async function syncPagesFromOnCrawlOptimized(
   const { crawl, pages } = await client.getLatestAccessibleCrawlData(projectId);
   const fetchDuration = Date.now() - fetchStartTime;
   
-  const projectName = await getProjectName(projectId);
+  const projectName = await getProjectName(projectId); // Always returns a string
   
   console.log(`📡 Fetched ${pages.length} pages from crawl: ${crawl.id} (${crawl.name || 'Unnamed crawl'}) in ${fetchDuration}ms`);
   
@@ -34,14 +35,24 @@ export async function syncPagesFromOnCrawlOptimized(
     projectId,
     projectName,
     crawl.id,
-    crawl.name
+    crawl.name // Already string | null, which is what createSyncHistoryRecord expects
   );
   
   try {
     // 3. Enhanced filtering with content validation
     console.log(`🔍 Starting enhanced filtering with content validation...`);
     const filterStartTime = Date.now();
-    const { indexablePages, stats: filterStats, examples } = optimizedFilterPages(pages);
+    
+    const indexablePages = pages.filter(page => 
+      !shouldExcludeUrl(
+        page.url, 
+        page.title ?? undefined,
+        page.meta_description ?? undefined,
+        page.h1 ?? undefined,
+        parseInt(page.status_code || '200')
+      )
+    ).map(processOnCrawlPage);
+    
     const filterDuration = Date.now() - filterStartTime;
     
     console.log(`🔍 ENHANCED filtering completed: ${indexablePages.length} kept, ${pages.length - indexablePages.length} excluded in ${filterDuration}ms`);
@@ -49,6 +60,15 @@ export async function syncPagesFromOnCrawlOptimized(
     // 4. Choose sync strategy based on mode
     console.log(`💾 Starting ${syncModeLabel} database sync with sync history ${syncHistoryId}...`);
     const syncStartTime = Date.now();
+    
+    const filterStats: FilterStats = {
+      total: pages.length,
+      filteredNoContent: pages.length - indexablePages.length,
+      filteredUrlPatterns: 0,
+      filteredForumContent: 0,
+      filteredStatusCode: 0,
+      kept: indexablePages.length
+    };
     
     const result = syncMode === SyncMode.URL_ONLY 
       ? await optimizedUrlOnlySync(indexablePages, syncHistoryId, projectName, filterStats)
@@ -65,9 +85,6 @@ export async function syncPagesFromOnCrawlOptimized(
       📝 Sync History ID: ${syncHistoryId} ✅
       📡 OnCrawl fetch: ${fetchDuration}ms
       🔍 Enhanced filtering: ${filterDuration}ms
-        💭 No content filtered: ${result.filteredNoContent}
-        🔗 URL pattern filtered: ${result.filteredUrlPatterns}  
-        💬 Forum content filtered: ${result.filteredForumContent}
       💾 Database sync: ${syncDuration}ms
       ✨ ${result.added} added
       🔄 ${result.updated} updated
@@ -89,9 +106,9 @@ export async function syncPagesFromOnCrawlOptimized(
       removed: result.removed,
       syncHistoryId,
       durationMs: overallDuration,
-      filteredNoContent: result.filteredNoContent,
-      filteredUrlPatterns: result.filteredUrlPatterns,
-      filteredForumContent: result.filteredForumContent
+      filteredNoContent: filterStats.filteredNoContent,
+      filteredUrlPatterns: filterStats.filteredUrlPatterns,
+      filteredForumContent: filterStats.filteredForumContent
     };
     
   } catch (error) {

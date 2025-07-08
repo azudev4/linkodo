@@ -764,8 +764,25 @@ function isValidUrl(url: string): boolean {
 /**
  * Check if a URL should be excluded from indexing
  */
-export function shouldExcludeUrl(url: string, title?: string, metaDescription?: string): boolean {
+export function shouldExcludeUrl(
+  url: string, 
+  title?: string, 
+  metaDescription?: string,
+  h1?: string,
+  statusCode?: number
+): boolean {
   if (!url) return true;
+  
+  // Status code check
+  if (statusCode && statusCode !== 200) {
+    return true;
+  }
+  
+  // SEO content check (2+ missing fields)
+  const seoFieldCount = [!!title?.trim(), !!metaDescription?.trim(), !!h1?.trim()].filter(Boolean).length;
+  if (seoFieldCount <= 1) {
+    return true;
+  }
   
   // Check for malformed URLs first
   if (!isValidUrl(url)) {
@@ -829,8 +846,35 @@ export function filterIndexableUrls(urls: string[], titles?: string[], metaDescr
 /**
  * Get exclusion reason for debugging
  */
-export function getExclusionReason(url: string, title?: string, metaDescription?: string): string | null {
+export function getExclusionReason(
+  url: string, 
+  title?: string, 
+  metaDescription?: string, 
+  h1?: string,
+  statusCode?: number
+): string | null {
   if (!url) return 'Empty URL';
+  
+  // Status code check
+  if (statusCode && statusCode !== 200) {
+    return `Status code: ${statusCode}`;
+  }
+  
+  // NEW: Check SEO field count
+  const hasTitle = !!title?.trim();
+  const hasMetaDescription = !!metaDescription?.trim();
+  const hasH1 = !!h1?.trim();
+  
+  const seoFieldCount = [hasTitle, hasMetaDescription, hasH1].filter(Boolean).length;
+  const missingFields = [];
+  
+  if (!hasTitle) missingFields.push('title');
+  if (!hasMetaDescription) missingFields.push('meta_description');
+  if (!hasH1) missingFields.push('h1');
+  
+  if (seoFieldCount <= 1) {
+    return `Missing ${missingFields.length}/3 SEO fields: ${missingFields.join(', ')}`;
+  }
   
   // Check for malformed URLs first
   if (!isValidUrl(url)) {
