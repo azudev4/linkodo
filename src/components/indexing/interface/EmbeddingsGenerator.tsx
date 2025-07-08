@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { motion } from 'framer-motion';
 import { Sparkles, Loader2, Zap } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface DatabaseStats {
   totalPages: number;
@@ -39,18 +40,30 @@ export function EmbeddingsGenerator({
         </CardDescription>
       </CardHeader>
 
-      <CardContent className="space-y-6">
-        {stats && stats.pagesWithoutEmbeddings > 0 && (
+      <CardContent className="space-y-6 min-h-[200px]">
+        {stats ? (
+          stats.pagesWithoutEmbeddings > 0 && (
+            <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-100">
+              <div className="flex items-center space-x-3">
+                <Zap className="w-5 h-5 text-purple-600" />
+                <div>
+                  <div className="font-medium text-purple-900">
+                    {stats.pagesWithoutEmbeddings.toLocaleString()} pages need embeddings
+                  </div>
+                  <div className="text-sm text-purple-700">
+                    Generate embeddings to enable semantic link matching
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        ) : (
           <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-100">
             <div className="flex items-center space-x-3">
-              <Zap className="w-5 h-5 text-purple-600" />
-              <div>
-                <div className="font-medium text-purple-900">
-                  {stats.pagesWithoutEmbeddings.toLocaleString()} pages need embeddings
-                </div>
-                <div className="text-sm text-purple-700">
-                  Generate embeddings to enable semantic link matching
-                </div>
+              <Skeleton className="w-5 h-5 rounded-full" />
+              <div className="space-y-2 flex-1">
+                <Skeleton variant="text" width={180} />
+                <Skeleton variant="text" width={240} className="opacity-70" />
               </div>
             </div>
           </div>
@@ -72,29 +85,33 @@ export function EmbeddingsGenerator({
         )}
 
         {/* Generate Button */}
-        <Button
-          onClick={onGenerate}
-          disabled={!stats || stats.pagesWithoutEmbeddings === 0 || isGenerating}
-          className="w-full h-12 rounded-xl bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
-          size="lg"
-        >
-          {isGenerating ? (
-            <>
-              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-              <span className="font-medium">Generating...</span>
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-5 h-5 mr-2" />
-              <span className="font-medium">
-                {stats && stats.pagesWithoutEmbeddings > 0 
-                  ? `Generate ${stats.pagesWithoutEmbeddings} Embeddings`
-                  : 'All Embeddings Generated'
-                }
-              </span>
-            </>
-          )}
-        </Button>
+        {stats ? (
+          <Button
+            onClick={onGenerate}
+            disabled={stats.pagesWithoutEmbeddings === 0 || isGenerating}
+            className="w-full h-12 rounded-xl bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
+            size="lg"
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                <span className="font-medium">Generating...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-5 h-5 mr-2" />
+                <span className="font-medium">
+                  {stats.pagesWithoutEmbeddings > 0 
+                    ? `Generate ${stats.pagesWithoutEmbeddings} Embeddings`
+                    : 'All Embeddings Generated'
+                  }
+                </span>
+              </>
+            )}
+          </Button>
+        ) : (
+          <Skeleton variant="button" className="w-full h-12" />
+        )}
       </CardContent>
     </Card>
   );

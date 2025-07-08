@@ -128,20 +128,23 @@ export function OnCrawlSync({
             <div className="flex items-center">
               <ZapIcon className="w-4 h-4 mr-1.5 text-emerald-500" />
               <span className="font-medium text-gray-700">Quick Sync:</span>
-              <span className="ml-1.5">Updates page URLs only - <span className="font-medium text-emerald-600">10x faster</span></span>
+              <span className="ml-1.5">Adds new & removes old pages - <span className="font-medium text-emerald-600">10x faster</span></span>
             </div>
             <div className="flex items-center">
               <Download className="w-4 h-4 mr-1.5 text-blue-500" />
               <span className="font-medium text-gray-700">Full Sync:</span>
-              <span className="ml-1.5">Updates all content & metadata</span>
+              <span className="ml-1.5">Detects & updates content/data changes</span>
               <HoverCard>
                 <HoverCardTrigger asChild>
-                  <HelpCircle className="w-4 h-4 ml-1.5 text-gray-400 hover:text-gray-600 cursor-help" />
+                  <div className="inline-flex ml-1.5 cursor-help">
+                    <HelpCircle className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                  </div>
                 </HoverCardTrigger>
                 <HoverCardContent 
+                  align="start"
                   side="right"
-                  className="w-80 animate-in zoom-in-90 duration-200"
                   sideOffset={10}
+                  className="w-80"
                 >
                   <div className="space-y-2">
                     <p className="text-sm font-medium">When to use Full Sync:</p>
