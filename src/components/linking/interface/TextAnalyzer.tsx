@@ -56,6 +56,7 @@ export function TextAnalyzer() {
   
   const loadingRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [suggestions, setSuggestions] = useState<LinkSuggestion[]>([]);
@@ -73,6 +74,29 @@ export function TextAnalyzer() {
       return () => clearTimeout(timer);
     }
   }, [error]);
+
+  // Highlight newly validated links after DOM updates
+  useEffect(() => {
+    if (latestLinkText) {
+      // Wait for DOM to update after text change
+      const timeoutId = setTimeout(() => {
+        const links = document.querySelectorAll('a');
+        const targetLink = Array.from(links).find(link => 
+          link.textContent === latestLinkText
+        );
+
+        if (targetLink) {
+          targetLink.classList.add('animate-highlight');
+          setTimeout(() => {
+            targetLink.classList.remove('animate-highlight');
+            setLatestLinkText(null);
+          }, 1500);
+        }
+      }, 50); // Small delay to ensure DOM is updated
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [latestLinkText, text]); // Watch both latestLinkText and text changes
 
   const clearMessages = () => {
     setError(null);
@@ -122,34 +146,13 @@ export function TextAnalyzer() {
     // Set latest link for highlighting
     setLatestLinkText(selectedTerm);
 
-    // Smooth scroll to editor and highlight the link
+    // Smooth scroll to editor
     if (editorRef.current) {
       editorRef.current.scrollIntoView({ 
         behavior: 'smooth',
         block: 'start'
       });
-
-      // Add highlight sooner
-      // Find the link in the editor
-      const links = document.querySelectorAll('a');
-      const targetLink = Array.from(links).find(link => 
-        link.textContent === selectedTerm && 
-        link.getAttribute('href') === suggestion.url
-      );
-
-      if (targetLink) {
-        // Add highlight with a small delay to ensure it's visible after scroll
-        setTimeout(() => {
-          targetLink.classList.add('animate-highlight');
-          // Remove highlight after 1.5 seconds
-          setTimeout(() => {
-            targetLink.classList.remove('animate-highlight');
-            setLatestLinkText(null);
-          }, 1500);
-        }, 100);
-      }
     }
-    
   };
 
   // Copy to markdown (current format)
@@ -305,6 +308,14 @@ export function TextAnalyzer() {
       
       if (suggestions.length === 0) {
         setError(`No suggestions found for "${selectedText.text}"`);
+      } else {
+        // Scroll to suggestions after a small delay to ensure rendering
+        setTimeout(() => {
+          suggestionsRef.current?.scrollIntoView({ 
+            behavior: 'smooth',
+            block: 'start'
+          });
+        }, 100);
       }
       
       setSelectedText(null);
@@ -315,24 +326,12 @@ export function TextAnalyzer() {
     }
   };
 
-  // Fixed handleTermSelect - always fetch fresh suggestions
-  const handleTermSelect = async (term: AnalyzedTerm) => {
-    try {
-      // Always fetch fresh suggestions when selecting a term
-      const freshSuggestions = await getSuggestionsForCandidate(term.text);
-      
-      startTransition(() => {
-        setSelectedTerm(term.text);
-        setSuggestions(freshSuggestions);
-      });
-    } catch (err) {
-      console.error('Error fetching suggestions for term:', err);
-      // Fallback to stored suggestions if API fails
-      startTransition(() => {
-        setSelectedTerm(term.text);
-        setSuggestions(term.suggestions);
-      });
-    }
+  // Use stored suggestions instead of re-fetching
+  const handleTermSelect = (term: AnalyzedTerm) => {
+    startTransition(() => {
+      setSelectedTerm(term.text);
+      setSuggestions(term.suggestions);
+    });
   };
 
   // Clear all data
@@ -507,7 +506,7 @@ export function TextAnalyzer() {
 
       {/* Suggestions */}
       {selectedTerm && (
-        <div className="space-y-4">
+        <div ref={suggestionsRef} className="space-y-4" style={{ scrollMarginTop: '2rem' }}>
           {suggestions.length > 0 ? (
             <SuggestionsList 
               suggestions={suggestions}
