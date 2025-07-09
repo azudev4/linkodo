@@ -88,7 +88,7 @@ export function AnalyzedTerms({ terms, selectedTerm, onTermSelect }: AnalyzedTer
                     <Button
                       variant={selectedTerm === term.text ? "default" : "outline"}
                       onClick={() => onTermSelect(term)}
-                      className={`w-full justify-between h-auto p-3 transition-all duration-200 ${
+                      className={`w-full justify-between h-12 p-3 transition-all duration-200 ${
                         selectedTerm === term.text 
                           ? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-600' 
                           : 'hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700'

@@ -7,7 +7,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   FileText, 
   Search, 
@@ -17,10 +16,8 @@ import {
   Target,
   Sparkles,
   Copy,
-  MousePointer,
   CheckCircle2,
   Zap,
-  Eye,
   Brain
 } from 'lucide-react';
 import { TextEditor } from './TextEditor';
@@ -68,7 +65,6 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
   const [selectedText, setSelectedText] = useState<Selection | null>(null);
   const [analyzedTerms, setAnalyzedTerms] = useState<AnalyzedTerm[]>([]);
   const [selectedTerm, setSelectedTerm] = useState<string | null>(null);
-  const [rawCandidates, setRawCandidates] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -109,11 +105,9 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
       const data = await response.json();
       
       if (data.success) {
-        setRawCandidates(data.candidates);
-        setSuccess(`Extracted ${data.count} anchor candidates. Processing embeddings...`);
-        
         // Process each candidate for suggestions
         await processAllCandidates(data.candidates);
+        setSuccess(`Extracted ${data.count} anchor candidates`);
       } else {
         setError(data.error || 'Failed to extract anchors');
       }
@@ -218,6 +212,12 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
 
   // Handle term selection from AnalyzedTerms
   const handleTermSelect = (term: AnalyzedTerm) => {
+    console.log('Switching from:', selectedTerm, 'to:', term.text);
+    console.log('Old suggestions count:', suggestions.length);
+    console.log('New suggestions count:', term.suggestions.length);
+    console.log('Old suggestion IDs:', suggestions.map(s => s.id));
+    console.log('New suggestion IDs:', term.suggestions.map(s => s.id));
+    
     setSelectedTerm(term.text);
     setSuggestions(term.suggestions);
   };
@@ -237,7 +237,6 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
     setText('');
     setSuggestions([]);
     setAnalyzedTerms([]);
-    setRawCandidates([]);
     setSelectedText(null);
     setSelectedTerm(null);
     setError(null);
@@ -407,69 +406,59 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
         </motion.div>
       )}
 
-      {/* Results Tabs */}
-      {(analyzedTerms.length > 0 || rawCandidates.length > 0) && (
-        <Tabs defaultValue="candidates" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="candidates">
-              Anchor Candidates ({analyzedTerms.filter(t => t.hasResults).length})
-            </TabsTrigger>
-            <TabsTrigger value="debug">
-              Debug ({rawCandidates.length})
-            </TabsTrigger>
-          </TabsList>
+      {/* Results */}
+      {analyzedTerms.length > 0 && (
+        <div className="w-full space-y-4">
+          <AnalyzedTerms 
+            terms={analyzedTerms}
+            selectedTerm={selectedTerm}
+            onTermSelect={handleTermSelect}
+          />
           
-          <TabsContent value="candidates" className="space-y-4">
-            <AnalyzedTerms 
-              terms={analyzedTerms}
-              selectedTerm={selectedTerm}
-              onTermSelect={handleTermSelect}
-            />
-            
-            {/* Current suggestions display */}
-            {suggestions.length > 0 && selectedTerm && (
-              <Card className="border-2 shadow-lg">
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-3">
-                    <div className="rounded-full bg-green-100 p-2">
-                      <Link className="w-5 h-5 text-green-600" />
-                    </div>
-                    <span>Suggestions for "{selectedTerm}"</span>
-                    <Badge variant="secondary">{suggestions.length} found</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {suggestions.map((suggestion, index) => (
-                      <motion.div
+          {/* Current suggestions display */}
+          {selectedTerm && (
+            <Card className="border-2 shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-3">
+                  <div className="rounded-full bg-green-100 p-2">
+                    <Link className="w-5 h-5 text-green-600" />
+                  </div>
+                  <span>Suggestions for "{selectedTerm}"</span>
+                  <Badge variant="secondary" className="min-w-[80px] text-center">
+                    {suggestions.length} found
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4" style={{ minHeight: '300px' }}>
+                  {suggestions.length > 0 ? (
+                    suggestions.map((suggestion, index) => (
+                      <div
                         key={suggestion.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.1 }}
                         className="border rounded-xl p-4 hover:bg-gray-50 transition-all duration-200"
                       >
                         <div className="space-y-3">
                           <div className="flex items-start justify-between">
-                            <h4 className="font-medium text-gray-900 leading-tight">
+                            <h4 className="font-medium text-gray-900 leading-tight line-clamp-2">
                               {suggestion.title}
                             </h4>
                             <div className="flex items-center space-x-2 flex-shrink-0 ml-3">
-                              <Badge variant="outline" className="text-xs">
+                              <Badge variant="outline" className="text-xs whitespace-nowrap">
                                 {suggestion.matchedSection}
                               </Badge>
-                              <Badge variant="outline" className="text-xs">
+                              <Badge variant="outline" className="text-xs whitespace-nowrap">
                                 <Target className="w-3 h-3 mr-1" />
                                 {Math.round(suggestion.relevanceScore * 100)}%
                               </Badge>
                             </div>
                           </div>
                           
-                          <p className="text-sm text-gray-600 leading-relaxed">
+                          <p className="text-sm text-gray-600 leading-relaxed line-clamp-2">
                             {suggestion.description}
                           </p>
                           
                           <div className="flex items-center justify-between">
-                            <div className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded">
+                            <div className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded truncate max-w-[200px]">
                               {suggestion.url}
                             </div>
                             <div className="flex items-center space-x-2">
@@ -496,44 +485,25 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
                             </div>
                           </div>
                         </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-          
-          <TabsContent value="debug" className="space-y-4">
-            <Card className="border-2 shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-3">
-                  <div className="rounded-full bg-gray-100 p-2">
-                    <Eye className="w-5 h-5 text-gray-600" />
-                  </div>
-                  <span>Raw GPT Candidates</span>
-                  <Badge variant="outline">{rawCandidates.length} extracted</Badge>
-                </CardTitle>
-                <CardDescription>
-                  Anchor candidates extracted by GPT-3.5-turbo before embedding matching
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {rawCandidates.map((candidate, index) => (
-                    <Badge key={index} variant="outline" className="text-xs">
-                      {candidate}
-                    </Badge>
-                  ))}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex items-center justify-center h-[300px] text-gray-500">
+                      <div className="text-center">
+                        <div className="text-sm">No suggestions found</div>
+                        <div className="text-xs mt-1">for "{selectedTerm}"</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
-        </Tabs>
+          )}
+        </div>
       )}
 
       {/* Empty state */}
-      {!isLoading && !isExtracting && analyzedTerms.length === 0 && rawCandidates.length === 0 && (
+      {!isLoading && !isExtracting && analyzedTerms.length === 0 && (
         <Card className="border-2 border-dashed border-gray-300">
           <CardContent className="p-8 text-center">
             <div className="space-y-4">
