@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Target, Copy, ExternalLink } from 'lucide-react';
+import { Target, Check, ExternalLink } from 'lucide-react';
 
 interface LinkSuggestion {
   id: string;
@@ -15,16 +15,26 @@ interface LinkSuggestion {
 interface SuggestionCardProps {
   suggestion: LinkSuggestion;
   index: number;
-  onCopyLink: (url: string) => void;
+  onValidateLink: (suggestion: LinkSuggestion) => void;
+  isValidated?: boolean;
 }
 
-export function SuggestionCard({ suggestion, index, onCopyLink }: SuggestionCardProps) {
+export function SuggestionCard({ 
+  suggestion, 
+  index, 
+  onValidateLink, 
+  isValidated = false 
+}: SuggestionCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ delay: index * 0.1 }}
-      className="border rounded-xl p-4 hover:bg-gray-50 hover:shadow-md transition-[background-color,box-shadow] duration-200"
+      className={`border rounded-xl p-4 transition-[background-color,box-shadow] duration-200 ${
+        isValidated 
+          ? 'bg-green-50 border-green-200 shadow-sm' 
+          : 'hover:bg-gray-50 hover:shadow-md'
+      }`}
     >
       <div className="space-y-3">
         <div className="flex items-start justify-between">
@@ -52,13 +62,27 @@ export function SuggestionCard({ suggestion, index, onCopyLink }: SuggestionCard
           </div>
           <div className="flex items-center space-x-2">
             <Button
-              variant="outline"
+              variant={isValidated ? "default" : "outline"}
               size="sm"
-              onClick={() => onCopyLink(suggestion.url)}
-              className="text-xs"
+              onClick={() => onValidateLink(suggestion)}
+              disabled={isValidated}
+              className={`text-xs ${
+                isValidated 
+                  ? 'bg-green-600 hover:bg-green-700 text-white' 
+                  : 'hover:bg-blue-50 hover:border-blue-200'
+              }`}
             >
-              <Copy className="w-3 h-3 mr-1" />
-              Copy
+              {isValidated ? (
+                <>
+                  <Check className="w-3 h-3 mr-1" />
+                  Validated
+                </>
+              ) : (
+                <>
+                  <Check className="w-3 h-3 mr-1" />
+                  Validate
+                </>
+              )}
             </Button>
             <Button
               variant="outline"

@@ -13,9 +13,11 @@ import {
   Sparkles,
   CheckCircle2,
   Zap,
-  Brain
+  Brain,
+  Copy,
+  Code
 } from 'lucide-react';
-import { TextEditor } from './TextEditor';
+import { RichTextEditor } from './RichTextEditor';
 import { AnalyzedTerms } from './AnalyzedTerms';
 import { SuggestionsList } from './SuggestionsList';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -29,11 +31,6 @@ interface LinkSuggestion {
   relevanceScore: number;
 }
 
-interface ContextMenuPosition {
-  x: number;
-  y: number;
-}
-
 interface Selection {
   text: string;
   startOffset: number;
@@ -45,15 +42,18 @@ interface AnalyzedTerm {
   hasResults: boolean;
   suggestionCount: number;
   suggestions: LinkSuggestion[];
+  isValidated?: boolean;
+}
+
+interface ValidatedAnchor {
+  anchorText: string;
+  url: string;
+  suggestionId: string;
 }
 
 export function TextAnalyzer() {
   const isMobile = useIsMobile();
-  const [text, setText] = useState(`Lorsque vous planifiez votre potager pour cette saison, il est essentiel de bien comprendre la préparation du sol et les techniques de compagnonnage des plantes. Un sol bien préparé et des associations judicieuses entre les légumes vous garantiront une récolte abondante.
-
-La rotation des cultures est également cruciale pour maintenir la fertilité du sol et éviter l'épuisement des nutriments. En alternant les familles de légumes d'une saison à l'autre, vous préservez l'équilibre naturel de votre jardin.
-
-N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succès de vos cultures. Chaque légume a ses propres exigences en matière de plantation et de récolte.`);
+  const [text, setText] = useState(`Lorsque vous planifiez votre potager pour cette saison...`);
   
   const loadingRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -62,6 +62,7 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
   const [selectedText, setSelectedText] = useState<Selection | null>(null);
   const [analyzedTerms, setAnalyzedTerms] = useState<AnalyzedTerm[]>([]);
   const [selectedTerm, setSelectedTerm] = useState<string | null>(null);
+  const [validatedAnchors, setValidatedAnchors] = useState<ValidatedAnchor[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -85,6 +86,65 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
     setSuccess(null);
   };
 
+  // Validate and insert link
+  const validateLink = (suggestion: LinkSuggestion) => {
+    if (!selectedTerm) return;
+    
+    const markdownLink = `[${selectedTerm}](${suggestion.url})`;
+    
+    // Replace first occurrence of the selected term with markdown link
+    const updatedText = text.replace(
+      new RegExp(`\\b${selectedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`),
+      markdownLink
+    );
+    
+    setText(updatedText);
+    
+    // Track validated anchor
+    const validatedAnchor: ValidatedAnchor = {
+      anchorText: selectedTerm,
+      url: suggestion.url,
+      suggestionId: suggestion.id
+    };
+    
+    setValidatedAnchors(prev => [...prev, validatedAnchor]);
+    
+    // Mark term as validated
+    setAnalyzedTerms(prev => 
+      prev.map(term => 
+        term.text === selectedTerm 
+          ? { ...term, isValidated: true }
+          : term
+      )
+    );
+    
+    // Remove validated suggestion from current suggestions
+    setSuggestions(prev => prev.filter(s => s.id !== suggestion.id));
+    
+    setSuccess(`Link validated for "${selectedTerm}"`);
+  };
+
+  // Copy to markdown (current format)
+  const copyToMarkdown = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setSuccess('Markdown copied to clipboard!');
+    } catch {
+      setError('Failed to copy markdown');
+    }
+  };
+
+  // Copy to HTML (convert markdown links to HTML)
+  const copyToHtml = async () => {
+    try {
+      const htmlText = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+      await navigator.clipboard.writeText(htmlText);
+      setSuccess('HTML copied to clipboard!');
+    } catch {
+      setError('Failed to copy HTML');
+    }
+  };
+
   // LLM anchor extraction
   const extractAnchors = async () => {
     if (!text.trim()) return;
@@ -102,7 +162,6 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
       const data = await response.json();
       
       if (data.success) {
-        // Process each candidate for suggestions
         await processAllCandidates(data.candidates);
         setSuccess(`Extracted ${data.count} anchor candidates`);
       } else {
@@ -118,7 +177,7 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
   // Process all candidates for suggestions
   const processAllCandidates = async (candidates: string[]) => {
     const newTerms: AnalyzedTerm[] = [];
-    const seenSuggestions = new Set<string>(); // Track seen suggestion IDs
+    const seenSuggestions = new Set<string>();
     
     for (const candidate of candidates) {
       try {
@@ -133,16 +192,18 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
           return true;
         });
         
+        // Check if this term was already validated
+        const isValidated = validatedAnchors.some(anchor => anchor.anchorText === candidate);
+        
         newTerms.push({
           text: candidate,
           hasResults: uniqueSuggestions.length > 0,
           suggestionCount: uniqueSuggestions.length,
-          suggestions: uniqueSuggestions
+          suggestions: uniqueSuggestions,
+          isValidated
         });
         
-        console.log(`📝 ${candidate}: ${uniqueSuggestions.length} unique suggestions (${allSuggestions.length} total)`);
-        
-        // Update state incrementally for better UX
+        // Update state incrementally
         setAnalyzedTerms([...newTerms]);
         
         // Small delay to avoid rate limiting
@@ -154,22 +215,21 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
           text: candidate,
           hasResults: false,
           suggestionCount: 0,
-          suggestions: []
+          suggestions: [],
+          isValidated: false
         });
       }
     }
     
     setAnalyzedTerms(newTerms);
     
-    // Auto-select the first term with results
-    const firstWithResults = newTerms.find(term => term.hasResults);
+    // Auto-select the first term with results (prefer non-validated)
+    const firstWithResults = newTerms.find(term => term.hasResults && !term.isValidated) || 
+                            newTerms.find(term => term.hasResults);
     if (firstWithResults) {
       setSelectedTerm(firstWithResults.text);
       setSuggestions(firstWithResults.suggestions);
     }
-    
-    console.log(`✅ Processed ${newTerms.length} candidates with ${seenSuggestions.size} unique suggestions total`);
-    setSuccess(`Analysis complete: ${newTerms.filter(t => t.hasResults).length}/${candidates.length} candidates have suggestions`);
   };
 
   // Get suggestions for a single candidate
@@ -187,17 +247,7 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
     return data.success ? data.suggestions : [];
   };
 
-  // Scroll to loading indicator
-  const scrollToLoading = () => {
-    setTimeout(() => {
-      loadingRef.current?.scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'center' 
-      });
-    }, 100); // Small delay to ensure loading indicator is rendered
-  };
-
-  // Manual anchor search (existing functionality)
+  // Manual anchor search
   const findLinkSuggestions = async () => {
     if (!selectedText) return;
     
@@ -214,12 +264,15 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
       
       // Add to analyzed terms if not from LLM extraction
       if (!analyzedTerms.find(t => t.text === selectedText.text)) {
+        const isValidated = validatedAnchors.some(anchor => anchor.anchorText === selectedText.text);
+        
         setAnalyzedTerms(prev => [
           {
             text: selectedText.text,
             hasResults: suggestions.length > 0,
             suggestionCount: suggestions.length,
-            suggestions
+            suggestions,
+            isValidated
           },
           ...prev
         ]);
@@ -232,7 +285,6 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
       }
       
       setSelectedText(null);
-      window.getSelection()?.removeAllRanges();
     } catch (err) {
       setError('Error finding suggestions');
     } finally {
@@ -242,26 +294,10 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
 
   // Handle term selection from AnalyzedTerms
   const handleTermSelect = (term: AnalyzedTerm) => {
-    console.log('Switching from:', selectedTerm, 'to:', term.text);
-    console.log('Old suggestions count:', suggestions.length);
-    console.log('New suggestions count:', term.suggestions.length);
-    console.log('Old suggestion IDs:', suggestions.map(s => s.id));
-    console.log('New suggestion IDs:', term.suggestions.map(s => s.id));
-    
     startTransition(() => {
       setSelectedTerm(term.text);
       setSuggestions(term.suggestions);
     });
-  };
-
-  // Copy link to clipboard
-  const copyLink = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-      setSuccess('Link copied to clipboard!');
-    } catch {
-      setError('Failed to copy link');
-    }
   };
 
   // Clear all data
@@ -271,6 +307,7 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
     setAnalyzedTerms([]);
     setSelectedText(null);
     setSelectedTerm(null);
+    setValidatedAnchors([]);
     setError(null);
     setSuccess(null);
   };
@@ -341,6 +378,11 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
                   ~{estimatedReadTime} min read
                 </Badge>
               )}
+              {validatedAnchors.length > 0 && (
+                <Badge variant="default" className="text-xs px-3 py-1 bg-green-600">
+                  {validatedAnchors.length} links validated
+                </Badge>
+              )}
             </div>
           </CardTitle>
           <CardDescription className="text-base text-muted-foreground">
@@ -349,7 +391,7 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
         </CardHeader>
       </Card>
 
-      {/* Text Editor */}
+      {/* Rich Text Editor */}
       <Card className="border-2 shadow-lg relative hover:shadow-xl transition-all duration-300">
         <CardContent className="space-y-6 p-6">
           <div className="flex items-center space-x-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
@@ -357,18 +399,17 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
               <Brain className="w-5 h-5 text-blue-600" />
             </div>
             <div className="text-sm text-blue-800">
-              <span className="font-medium">Two modes:</span> Click <strong>"Analyze with AI"</strong> to find all anchors automatically, or <strong>manually select text</strong> for individual suggestions
+              <span className="font-medium">Rich text editor:</span> Right-click on any text to find suggestions. Links become clickable when validated.
             </div>
           </div>
 
-          <TextEditor
+          <RichTextEditor
             text={text}
             onTextChange={setText}
             selectedText={selectedText}
             onSelectionChange={setSelectedText}
             onFindLinks={() => {
               findLinkSuggestions();
-              scrollToLoading();
             }}
             isLoading={isLoading}
           />
@@ -384,95 +425,91 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
                 {isExtracting ? (
                   <>
                     <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    <span className="font-medium">Analyzing...</span>
+                    Analyzing...
                   </>
                 ) : (
                   <>
-                    <Zap className="w-5 h-5 mr-2" />
-                    <span className="font-medium">Analyze with AI</span>
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    Analyze with AI
                   </>
                 )}
               </Button>
-
+            </div>
+            
+            <div className="flex items-center space-x-2">
               <Button
+                onClick={copyToMarkdown}
                 variant="outline"
-                onClick={clearAll}
-                disabled={!text.trim() || isLoading || isExtracting}
                 size="sm"
-                className="px-6 rounded-lg border-2 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors duration-200"
+                className="text-xs"
+              >
+                <Copy className="w-3 h-3 mr-1" />
+                Copy Markdown
+              </Button>
+              <Button
+                onClick={copyToHtml}
+                variant="outline"
+                size="sm"
+                className="text-xs"
+              >
+                <Code className="w-3 h-3 mr-1" />
+                Copy HTML
+              </Button>
+              <Button
+                onClick={clearAll}
+                variant="outline"
+                size="sm"
+                className="text-xs text-red-600 hover:text-red-700"
               >
                 Clear All
               </Button>
-            </div>
-
-            <div className="text-sm text-gray-500">
-              {analyzedTerms.filter(t => t.hasResults).length > 0 && 
-                `${analyzedTerms.filter(t => t.hasResults).length} terms with results`
-              }
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Loading State */}
+      {/* Loading indicator */}
       {(isLoading || isExtracting) && (
-        <motion.div
-          ref={loadingRef}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <Card className="border-2 border-blue-200 bg-blue-50">
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-3">
-                <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-                <div>
-                  <div className="font-medium text-blue-900">
-                    {isExtracting ? 'Extracting anchor candidates with AI...' : 'Finding link suggestions...'}
-                  </div>
-                  <div className="text-sm text-blue-700">
-                    {isExtracting 
-                      ? 'Analyzing text for potential anchor opportunities'
-                      : selectedText && `Analyzing "${selectedText.text}" against your database`
-                    }
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+        <div ref={loadingRef} className="flex justify-center py-8">
+          <div className="flex items-center space-x-3 text-blue-600">
+            <Loader2 className="w-6 h-6 animate-spin" />
+            <span className="text-lg font-medium">
+              {isExtracting ? 'Analyzing text for anchors...' : 'Finding suggestions...'}
+            </span>
+          </div>
+        </div>
       )}
 
-      {/* Results */}
+      {/* Analyzed Terms */}
       {analyzedTerms.length > 0 && (
-        <div className="w-full space-y-4">
-          <AnalyzedTerms 
-            terms={analyzedTerms}
-            selectedTerm={selectedTerm}
-            onTermSelect={handleTermSelect}
-          />
-          
-          {/* Current suggestions display */}
-          {selectedTerm && (
-            <div className="space-y-4" style={{ minHeight: '300px' }}>
-              {suggestions.length > 0 ? (
-                <SuggestionsList 
-                  suggestions={suggestions}
-                  onCopyLink={copyLink}
-                  selectedTerm={selectedTerm}
-                />
-              ) : (
-                <Card className="border-2 shadow-lg">
-                  <CardContent>
-                    <div className="flex items-center justify-center h-[300px] text-gray-500">
-                      <div className="text-center">
-                        <div className="text-sm">No suggestions found</div>
-                        <div className="text-xs mt-1">for "{selectedTerm}"</div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
+        <AnalyzedTerms
+          terms={analyzedTerms}
+          selectedTerm={selectedTerm}
+          onTermSelect={handleTermSelect}
+        />
+      )}
+
+      {/* Suggestions */}
+      {selectedTerm && (
+        <div className="space-y-4">
+          {suggestions.length > 0 ? (
+            <SuggestionsList 
+              suggestions={suggestions}
+              onValidateLink={validateLink}
+              selectedTerm={selectedTerm}
+              validatedAnchors={validatedAnchors}
+            />
+          ) : (
+            <Card className="border-2 shadow-lg">
+              <CardContent>
+                <div className="flex items-center justify-center h-[300px] text-gray-500">
+                  <div className="text-center">
+                    <div className="text-sm">No suggestions found</div>
+                    <div className="text-xs mt-1">for "{selectedTerm}"</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           )}
         </div>
       )}

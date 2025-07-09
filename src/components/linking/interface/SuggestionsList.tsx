@@ -13,17 +13,34 @@ interface LinkSuggestion {
   relevanceScore: number;
 }
 
-interface SuggestionsListProps {
-  suggestions: LinkSuggestion[];
-  onCopyLink: (url: string) => void;
-  selectedTerm?: string;
+interface ValidatedAnchor {
+  anchorText: string;
+  url: string;
+  suggestionId: string;
 }
 
-export function SuggestionsList({ suggestions, onCopyLink, selectedTerm }: SuggestionsListProps) {
+interface SuggestionsListProps {
+  suggestions: LinkSuggestion[];
+  onValidateLink: (suggestion: LinkSuggestion) => void;
+  selectedTerm?: string;
+  validatedAnchors: ValidatedAnchor[];
+}
+
+export function SuggestionsList({ 
+  suggestions, 
+  onValidateLink, 
+  selectedTerm,
+  validatedAnchors
+}: SuggestionsListProps) {
   if (suggestions.length === 0) return null;
 
   // Create a stable key based on the selected term and first suggestion ID
   const listKey = `${selectedTerm || 'default'}-${suggestions[0]?.id || 'empty'}`;
+
+  // Check if a suggestion is already validated
+  const isValidated = (suggestionId: string) => {
+    return validatedAnchors.some(anchor => anchor.suggestionId === suggestionId);
+  };
 
   return (
     <AnimatePresence mode="wait">
@@ -53,7 +70,8 @@ export function SuggestionsList({ suggestions, onCopyLink, selectedTerm }: Sugge
                   key={suggestion.id}
                   suggestion={suggestion}
                   index={index}
-                  onCopyLink={onCopyLink}
+                  onValidateLink={onValidateLink}
+                  isValidated={isValidated(suggestion.id)}
                 />
               ))}
             </div>

@@ -1,6 +1,5 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MousePointer, Search } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -16,7 +15,7 @@ interface ContextMenuPosition {
   y: number;
 }
 
-interface TextEditorProps {
+interface RichTextEditorProps {
   text: string;
   onTextChange: (text: string) => void;
   selectedText: Selection | null;
@@ -25,76 +24,108 @@ interface TextEditorProps {
   isLoading: boolean;
 }
 
-export function TextEditor({
+export function RichTextEditor({
   text,
   onTextChange,
   selectedText,
   onSelectionChange,
   onFindLinks,
   isLoading
-}: TextEditorProps) {
+}: RichTextEditorProps) {
   const isMobile = useIsMobile();
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState<ContextMenuPosition>({ x: 0, y: 0 });
   
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Convert markdown to HTML
+  const markdownToHtml = (markdown: string): string => {
+    return markdown
+      // Convert markdown links to HTML
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 underline">$1</a>')
+      // Convert line breaks to <br>
+      .replace(/\n/g, '<br>');
+  };
+
+  // Convert HTML back to markdown
+  const htmlToMarkdown = (html: string): string => {
+    return html
+      // Convert HTML links back to markdown
+      .replace(/<a[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/g, '[$2]($1)')
+      // Convert <br> back to line breaks
+      .replace(/<br\s*\/?>/g, '\n')
+      // Remove other HTML tags
+      .replace(/<[^>]*>/g, '');
+  };
+
+  // Update editor content when text changes
+  useEffect(() => {
+    if (editorRef.current) {
+      const htmlContent = markdownToHtml(text);
+      if (editorRef.current.innerHTML !== htmlContent) {
+        editorRef.current.innerHTML = htmlContent;
+      }
+    }
+  }, [text]);
+
+  // Handle content changes
+  const handleInput = useCallback(() => {
+    if (editorRef.current) {
+      const htmlContent = editorRef.current.innerHTML;
+      const markdownContent = htmlToMarkdown(htmlContent);
+      onTextChange(markdownContent);
+    }
+  }, [onTextChange]);
+
+  // Get selected text from contentEditable
+  const getSelectedText = useCallback((): Selection | null => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+    
+    const range = selection.getRangeAt(0);
+    const selectedText = range.toString().trim();
+    
+    if (selectedText.length >= 3) {
+      return {
+        text: selectedText,
+        startOffset: range.startOffset,
+        endOffset: range.endOffset
+      };
+    }
+    
+    return null;
+  }, []);
 
   // Handle text selection
   const handleMouseUp = useCallback(() => {
-    if (!textareaRef.current) return;
-
-    const textarea = textareaRef.current;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
+    const selection = getSelectedText();
+    onSelectionChange(selection);
     
-    if (start !== end && (end - start) >= 3) {
-      const selectedText = textarea.value.substring(start, end).trim();
-      if (selectedText.length >= 3) {
-        onSelectionChange({
-          text: selectedText,
-          startOffset: start,
-          endOffset: end
-        });
-        return;
-      }
+    if (!selection) {
+      setShowContextMenu(false);
     }
-    
-    onSelectionChange(null);
-    setShowContextMenu(false);
-  }, [onSelectionChange]);
+  }, [onSelectionChange, getSelectedText]);
 
   // Handle right-click context menu
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    
     let currentSelection = selectedText;
     
-    if (!currentSelection && start !== end && (end - start) >= 3) {
-      const text = textarea.value.substring(start, end).trim();
-      if (text.length >= 3) {
-        currentSelection = {
-          text: text,
-          startOffset: start,
-          endOffset: end
-        };
-        onSelectionChange(currentSelection);
-      }
+    if (!currentSelection) {
+      currentSelection = getSelectedText();
+      onSelectionChange(currentSelection);
     }
     
     setContextMenuPosition({
       x: e.clientX,
       y: e.clientY
     });
+    
     setShowContextMenu(true);
-  }, [selectedText, onSelectionChange]);
+  }, [selectedText, onSelectionChange, getSelectedText]);
 
   // Close context menu when clicking elsewhere
   useEffect(() => {
@@ -110,28 +141,52 @@ export function TextEditor({
     }
   }, [showContextMenu]);
 
-  const wordCount = text.trim().split(/\s+/).filter(word => word.length > 0).length;
-  const estimatedReadTime = Math.ceil(wordCount / 200);
+  // Handle paste - convert to plain text
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    document.execCommand('insertText', false, text);
+  }, []);
+
+  // Prevent default formatting shortcuts
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Prevent default formatting
+    if (e.ctrlKey || e.metaKey) {
+      if (['b', 'i', 'u'].includes(e.key.toLowerCase())) {
+        e.preventDefault();
+      }
+    }
+  }, []);
 
   return (
-    <div 
-      className="relative"
-      onContextMenu={handleContextMenu}
-    >
-      <textarea
-        ref={textareaRef}
-        value={text}
-        onChange={(e) => onTextChange(e.target.value)}
+    <div className="relative">
+      <div
+        ref={editorRef}
+        contentEditable
+        onInput={handleInput}
         onMouseUp={handleMouseUp}
         onContextMenu={handleContextMenu}
-        style={{ userSelect: 'text' }}
-        className="w-full min-h-[400px] p-4 border-2 border-gray-200 rounded-xl resize-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 transition-all duration-200 text-gray-800 leading-relaxed bg-white shadow-sm hover:shadow-md select-text"
-        placeholder={isMobile ? 
-          "Paste your SEO content here and select text to find link opportunities. Tap and hold to open the link finder menu." :
-          "Paste your SEO content here and select text to find link opportunities. Right-click on selected text to find relevant links."
-        }
-        disabled={isLoading}
+        onPaste={handlePaste}
+        onKeyDown={handleKeyDown}
+        className="w-full min-h-[400px] p-4 border-2 border-gray-200 rounded-xl focus:border-blue-300 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all duration-200 text-gray-800 leading-relaxed bg-white shadow-sm hover:shadow-md"
+        style={{ 
+          userSelect: 'text',
+          WebkitUserSelect: 'text',
+          MozUserSelect: 'text',
+          msUserSelect: 'text'
+        }}
+        suppressContentEditableWarning={true}
       />
+
+      {/* Placeholder */}
+      {!text && (
+        <div className="absolute top-4 left-4 text-gray-400 pointer-events-none">
+          {isMobile ? 
+            "Paste your SEO content here and select text to find link opportunities. Tap and hold to open the link finder menu." :
+            "Paste your SEO content here and select text to find link opportunities. Right-click on selected text to find relevant links."
+          }
+        </div>
+      )}
       
       {/* Selection indicator with action button - only on mobile */}
       {isMobile && selectedText && (
@@ -212,4 +267,4 @@ export function TextEditor({
       </AnimatePresence>
     </div>
   );
-} 
+}
