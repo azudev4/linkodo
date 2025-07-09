@@ -38,7 +38,7 @@ export function Sidebar({ className }: SidebarProps) {
       {/* Mobile menu button */}
       <button
         onClick={toggleSidebar}
-        className="md:hidden fixed top-4 left-4 z-50 p-2 bg-white rounded-lg shadow-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+        className="md:hidden fixed top-4 left-4 z-40 p-2 bg-white rounded-lg shadow-lg border border-gray-200 hover:bg-gray-50 transition-colors"
         aria-label="Toggle sidebar"
       >
         <Menu className="w-5 h-5 text-gray-600" />
@@ -47,7 +47,7 @@ export function Sidebar({ className }: SidebarProps) {
       {/* Mobile backdrop */}
       <div
         className={cn(
-          "md:hidden fixed inset-0 bg-black transition-opacity duration-300 ease-in-out z-[9997]",
+          "md:hidden fixed inset-0 bg-black transition-opacity duration-300 ease-in-out z-30",
           isOpen ? "opacity-40 pointer-events-auto" : "opacity-0 pointer-events-none"
         )}
         onClick={closeSidebar}
@@ -61,7 +61,7 @@ export function Sidebar({ className }: SidebarProps) {
           // Desktop styles
           "md:w-64 md:min-h-screen md:sticky md:top-0",
           // Mobile styles
-          "md:translate-x-0 fixed inset-y-0 left-0 z-[9998] w-72 transform transition-transform duration-300 ease-in-out",
+          "md:translate-x-0 fixed inset-y-0 left-0 z-40 w-72 transform transition-transform duration-300 ease-in-out",
           isOpen ? "translate-x-0" : "-translate-x-full",
           className
         )}
