@@ -1,7 +1,7 @@
 // src/components/linking/interface/TextAnalyzer.tsx
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useEffect, startTransition, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,13 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   FileText, 
-  Search, 
   Loader2, 
-  Link, 
-  ExternalLink, 
-  Target,
   Sparkles,
-  Copy,
   CheckCircle2,
   Zap,
   Brain
@@ -60,6 +55,7 @@ La rotation des cultures est également cruciale pour maintenir la fertilité du
 
 N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succès de vos cultures. Chaque légume a ses propres exigences en matière de plantation et de récolte.`);
   
+  const loadingRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [suggestions, setSuggestions] = useState<LinkSuggestion[]>([]);
@@ -163,9 +159,6 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
       }
     }
     
-    // Sort by most suggestions first
-    newTerms.sort((a, b) => b.suggestionCount - a.suggestionCount);
-    
     setAnalyzedTerms(newTerms);
     
     // Auto-select the first term with results
@@ -194,6 +187,16 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
     return data.success ? data.suggestions : [];
   };
 
+  // Scroll to loading indicator
+  const scrollToLoading = () => {
+    setTimeout(() => {
+      loadingRef.current?.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'center' 
+      });
+    }, 100); // Small delay to ensure loading indicator is rendered
+  };
+
   // Manual anchor search (existing functionality)
   const findLinkSuggestions = async () => {
     if (!selectedText) return;
@@ -204,18 +207,21 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
     try {
       const suggestions = await getSuggestionsForCandidate(selectedText.text);
       
-      setSuggestions(suggestions);
+      startTransition(() => {
+        setSuggestions(suggestions);
+        setSelectedTerm(selectedText.text);
+      });
       
       // Add to analyzed terms if not from LLM extraction
       if (!analyzedTerms.find(t => t.text === selectedText.text)) {
         setAnalyzedTerms(prev => [
-          ...prev,
           {
             text: selectedText.text,
             hasResults: suggestions.length > 0,
             suggestionCount: suggestions.length,
             suggestions
-          }
+          },
+          ...prev
         ]);
       }
       
@@ -242,8 +248,10 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
     console.log('Old suggestion IDs:', suggestions.map(s => s.id));
     console.log('New suggestion IDs:', term.suggestions.map(s => s.id));
     
-    setSelectedTerm(term.text);
-    setSuggestions(term.suggestions);
+    startTransition(() => {
+      setSelectedTerm(term.text);
+      setSuggestions(term.suggestions);
+    });
   };
 
   // Copy link to clipboard
@@ -358,7 +366,10 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
             onTextChange={setText}
             selectedText={selectedText}
             onSelectionChange={setSelectedText}
-            onFindLinks={findLinkSuggestions}
+            onFindLinks={() => {
+              findLinkSuggestions();
+              scrollToLoading();
+            }}
             isLoading={isLoading}
           />
 
@@ -406,6 +417,7 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
       {/* Loading State */}
       {(isLoading || isExtracting) && (
         <motion.div
+          ref={loadingRef}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
         >

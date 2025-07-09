@@ -21,10 +21,10 @@ interface SuggestionCardProps {
 export function SuggestionCard({ suggestion, index, onCopyLink }: SuggestionCardProps) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={{ delay: index * 0.1 }}
-      className="border rounded-xl p-4 hover:bg-gray-50 transition-all duration-200 hover:shadow-md"
+      className="border rounded-xl p-4 hover:bg-gray-50 hover:shadow-md transition-[background-color,box-shadow] duration-200"
     >
       <div className="space-y-3">
         <div className="flex items-start justify-between">
@@ -76,4 +76,4 @@ export function SuggestionCard({ suggestion, index, onCopyLink }: SuggestionCard
       </div>
     </motion.div>
   );
-} 
+}
