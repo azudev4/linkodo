@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { MousePointer, Search } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { LinkHoverCard } from './LinkHoverCard';
 
 interface Selection {
   text: string;
@@ -35,29 +36,90 @@ export function RichTextEditor({
   const isMobile = useIsMobile();
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState<ContextMenuPosition>({ x: 0, y: 0 });
+  const [showHoverCard, setShowHoverCard] = useState(false);
+  const [hoverCardUrl, setHoverCardUrl] = useState('');
+  const [hoverCardPosition, setHoverCardPosition] = useState({ x: 0, y: 0 });
   
   const editorRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Convert markdown to HTML
   const markdownToHtml = (markdown: string): string => {
     return markdown
-      // Convert markdown links to HTML
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 underline">$1</a>')
-      // Convert line breaks to <br>
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="pointer-events: all;" class="text-blue-600 hover:text-blue-800 underline decoration-2 underline-offset-2 transition-all duration-200 cursor-pointer hover:bg-blue-50 hover:shadow-sm rounded px-1 py-0.5 -mx-1 -my-0.5" data-url="$2" data-text="$1" title="">$1</a>')
       .replace(/\n/g, '<br>');
   };
 
   // Convert HTML back to markdown
   const htmlToMarkdown = (html: string): string => {
     return html
-      // Convert HTML links back to markdown
       .replace(/<a[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/g, '[$2]($1)')
-      // Convert <br> back to line breaks
       .replace(/<br\s*\/?>/g, '\n')
-      // Remove other HTML tags
       .replace(/<[^>]*>/g, '');
   };
+
+  // Handle scroll events
+  useEffect(() => {
+    const handleScroll = () => {
+      if (showHoverCard) {
+        setShowHoverCard(false);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      window.removeEventListener('scroll', handleScroll, true);
+    };
+  }, [showHoverCard]);
+
+  // Global mouse tracking for hover detection
+  useEffect(() => {
+    if (isMobile) return;
+
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      const element = document.elementFromPoint(e.clientX, e.clientY);
+      const link = element?.closest('a[href]') as HTMLAnchorElement;
+      const hoverCard = element?.closest('[data-hover-card]') as HTMLElement;
+      
+      if (link && editorRef.current?.contains(link)) {
+        if (hoverTimeoutRef.current) {
+          clearTimeout(hoverTimeoutRef.current);
+        }
+        
+        if (!showHoverCard || hoverCardUrl !== link.href) {
+          const linkRect = link.getBoundingClientRect();
+          setHoverCardUrl(link.href);
+          setHoverCardPosition({
+            x: linkRect.right,
+            y: linkRect.bottom
+          });
+          setShowHoverCard(true);
+        }
+      } else if (hoverCard) {
+        // Mouse is over hover card - keep it visible
+        if (hoverTimeoutRef.current) {
+          clearTimeout(hoverTimeoutRef.current);
+        }
+      } else if (showHoverCard) {
+        // Mouse not over link or card - hide after delay
+        if (hoverTimeoutRef.current) {
+          clearTimeout(hoverTimeoutRef.current);
+        }
+        hoverTimeoutRef.current = setTimeout(() => {
+          setShowHoverCard(false);
+        }, 50);
+      }
+    };
+
+    document.addEventListener('mousemove', handleGlobalMouseMove);
+    return () => {
+      document.removeEventListener('mousemove', handleGlobalMouseMove);
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, [isMobile, showHoverCard, hoverCardUrl]);
 
   // Update editor content when text changes
   useEffect(() => {
@@ -141,7 +203,18 @@ export function RichTextEditor({
     }
   }, [showContextMenu]);
 
-  // Handle paste - convert to plain text
+  // Handle clicks on links
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    const link = target.closest('a[href]') as HTMLAnchorElement;
+    if (link) {
+      e.preventDefault();
+      e.stopPropagation();
+      window.open(link.href, '_blank', 'noopener,noreferrer');
+    }
+  }, []);
+
+  // Handle paste
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     e.preventDefault();
     const text = e.clipboardData.getData('text/plain');
@@ -150,7 +223,6 @@ export function RichTextEditor({
 
   // Prevent default formatting shortcuts
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    // Prevent default formatting
     if (e.ctrlKey || e.metaKey) {
       if (['b', 'i', 'u'].includes(e.key.toLowerCase())) {
         e.preventDefault();
@@ -166,6 +238,7 @@ export function RichTextEditor({
         onInput={handleInput}
         onMouseUp={handleMouseUp}
         onContextMenu={handleContextMenu}
+        onClick={handleClick}
         onPaste={handlePaste}
         onKeyDown={handleKeyDown}
         className="w-full min-h-[400px] p-4 border-2 border-gray-200 rounded-xl focus:border-blue-300 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all duration-200 text-gray-800 leading-relaxed bg-white shadow-sm hover:shadow-md"
@@ -188,7 +261,7 @@ export function RichTextEditor({
         </div>
       )}
       
-      {/* Selection indicator with action button - only on mobile */}
+      {/* Selection indicator - mobile only */}
       {isMobile && selectedText && (
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
@@ -210,7 +283,7 @@ export function RichTextEditor({
         </motion.div>
       )}
 
-      {/* Context Menu with backdrop */}
+      {/* Context Menu */}
       <AnimatePresence>
         {showContextMenu && (
           <>
@@ -265,6 +338,14 @@ export function RichTextEditor({
           </>
         )}
       </AnimatePresence>
+
+      {/* Link Hover Card */}
+      <LinkHoverCard
+        url={hoverCardUrl}
+        isVisible={showHoverCard}
+        position={hoverCardPosition}
+        onHide={() => setShowHoverCard(false)}
+      />
     </div>
   );
 }
