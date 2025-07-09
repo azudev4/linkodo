@@ -36,9 +36,9 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: 'system',
-          content: `You are an expert SEO content analyzer. Your goal is to extract ALL high-quality anchor text candidates from the provided text for internal linking purposes.
+          content: `You are an expert SEO content analyzer. Your goal is to extract ALL anchor text candidates from the provided text for internal linking purposes.
 
-PRIORITY TARGETS (focus on these):
+PRIORITY TARGETS :
 - Specific techniques, methods, processes
 - Products, tools, equipment, materials
 - Problems and solutions
@@ -48,15 +48,14 @@ PRIORITY TARGETS (focus on these):
 - Seasonal/timing-related activities
 
 QUALITY GUIDELINES:
-- Length: 1-5 words optimal (avoid very long phrases)
-- Specificity: Prefer specific terms over generic ones
-- Linkability: Choose terms likely to have their own dedicated pages
+- Length: 1-5 words optimal 
+- Specificity: Specific terms over generic ones
 - Search intent: Terms people would actually search for help with
 
 AVOID:
 - Generic words
 - Personal pronouns and common articles  
-- Overly broad category terms unless no specifics exist
+- Overly broad category terms
 - Repetitive variations of the same concept
 
 OUTPUT:
@@ -67,7 +66,7 @@ Example candidates: ["wall mounting", "drill bits", "soil preparation", "safety 
         },
         {
           role: 'user',
-          content: `Extract ALL potential relevant anchor candidates from this text and strictly follow the guidelines:\n\n${text}`
+          content: `Extract ALL (max 100) potential relevant anchor candidates from this text and strictly follow the guidelines:\n\n${text}`
         }
       ],
       temperature: 0.3,
@@ -100,10 +99,10 @@ Example candidates: ["wall mounting", "drill bits", "soil preparation", "safety 
       .filter(candidate => 
         typeof candidate === 'string' && 
         candidate.trim().length > 2 &&
-        candidate.trim().length < 50 // Reduced to match 1-5 words guideline
+        candidate.trim().length < 60 // Reduced to match 1-5 words guideline
       )
       .map(candidate => candidate.trim())
-      .slice(0, 50); // Hard limit
+      .slice(0, 75); // Hard limit
     
     console.log(`✅ Extracted ${cleanedCandidates.length} anchor candidates`);
     
