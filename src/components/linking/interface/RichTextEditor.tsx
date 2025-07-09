@@ -47,7 +47,7 @@ export function RichTextEditor({
   // Convert markdown to HTML
   const markdownToHtml = (markdown: string): string => {
     return markdown
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="pointer-events: all;" class="text-blue-600 hover:text-blue-800 underline decoration-2 underline-offset-2 transition-all duration-200 cursor-pointer hover:bg-blue-50 hover:shadow-sm rounded px-1 py-0.5 -mx-1 -my-0.5" data-url="$2" data-text="$1" title="">$1</a>')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="pointer-events: all;" class="text-blue-600 hover:text-blue-800 underline decoration-2 underline-offset-2 transition-all duration-200 cursor-pointer hover:bg-blue-50 hover:shadow-sm rounded px-1 py-0.5 -mx-1 -my-0.5 [&.animate-highlight]:bg-yellow-200 [&.animate-highlight]:shadow-lg [&.animate-highlight]:scale-105" data-url="$2" data-text="$1" title="">$1</a>')
       .replace(/\n/g, '<br>');
   };
 
@@ -65,13 +65,16 @@ export function RichTextEditor({
       if (showHoverCard) {
         setShowHoverCard(false);
       }
+      if (showContextMenu) {
+        setShowContextMenu(false);
+      }
     };
 
     window.addEventListener('scroll', handleScroll, true);
     return () => {
       window.removeEventListener('scroll', handleScroll, true);
     };
-  }, [showHoverCard]);
+  }, [showHoverCard, showContextMenu]);
 
   // Global mouse tracking for hover detection
   useEffect(() => {

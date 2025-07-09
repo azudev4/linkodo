@@ -11,7 +11,6 @@ import {
   FileText, 
   Loader2, 
   Sparkles,
-  CheckCircle2,
   Zap,
   Brain,
   Copy,
@@ -56,6 +55,7 @@ export function TextAnalyzer() {
   const [text, setText] = useState(`Lorsque vous planifiez votre potager pour cette saison...`);
   
   const loadingRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [suggestions, setSuggestions] = useState<LinkSuggestion[]>([]);
@@ -64,16 +64,9 @@ export function TextAnalyzer() {
   const [selectedTerm, setSelectedTerm] = useState<string | null>(null);
   const [validatedAnchors, setValidatedAnchors] = useState<ValidatedAnchor[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [latestLinkText, setLatestLinkText] = useState<string | null>(null);
 
-  // Clear messages after delay
-  useEffect(() => {
-    if (success) {
-      const timer = setTimeout(() => setSuccess(null), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [success]);
-
+  // Clear error after delay
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => setError(null), 8000);
@@ -83,33 +76,41 @@ export function TextAnalyzer() {
 
   const clearMessages = () => {
     setError(null);
-    setSuccess(null);
   };
 
-  // Validate and insert link
+  // Fixed validateLink - handles replacing existing links and updating state
   const validateLink = (suggestion: LinkSuggestion) => {
     if (!selectedTerm) return;
     
-    const markdownLink = `[${selectedTerm}](${suggestion.url})`;
+    const newMarkdownLink = `[${selectedTerm}](${suggestion.url})`;
     
-    // Replace first occurrence of the selected term with markdown link
-    const updatedText = text.replace(
-      new RegExp(`\\b${selectedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`),
-      markdownLink
-    );
+    // Check if this term already has a markdown link
+    const existingLinkRegex = new RegExp(`\\[${selectedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]\\([^)]+\\)`, 'g');
+    const hasExistingLink = existingLinkRegex.test(text);
+    
+    let updatedText;
+    if (hasExistingLink) {
+      // Replace existing markdown link for this term
+      updatedText = text.replace(existingLinkRegex, newMarkdownLink);
+    } else {
+      // Create new markdown link for plain text term
+      const termRegex = new RegExp(`\\b${selectedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+      updatedText = text.replace(termRegex, newMarkdownLink);
+    }
     
     setText(updatedText);
     
-    // Track validated anchor
-    const validatedAnchor: ValidatedAnchor = {
-      anchorText: selectedTerm,
-      url: suggestion.url,
-      suggestionId: suggestion.id
-    };
+    // Remove existing validation for this term before adding new one
+    setValidatedAnchors(prev => {
+      const filtered = prev.filter(anchor => anchor.anchorText !== selectedTerm);
+      return [...filtered, {
+        anchorText: selectedTerm,
+        url: suggestion.url,
+        suggestionId: suggestion.id
+      }];
+    });
     
-    setValidatedAnchors(prev => [...prev, validatedAnchor]);
-    
-    // Mark term as validated
+    // Mark term as validated in analyzed terms
     setAnalyzedTerms(prev => 
       prev.map(term => 
         term.text === selectedTerm 
@@ -117,18 +118,44 @@ export function TextAnalyzer() {
           : term
       )
     );
+
+    // Set latest link for highlighting
+    setLatestLinkText(selectedTerm);
+
+    // Smooth scroll to editor and highlight the link
+    if (editorRef.current) {
+      editorRef.current.scrollIntoView({ 
+        behavior: 'smooth',
+        block: 'start'
+      });
+
+      // Add highlight sooner
+      // Find the link in the editor
+      const links = document.querySelectorAll('a');
+      const targetLink = Array.from(links).find(link => 
+        link.textContent === selectedTerm && 
+        link.getAttribute('href') === suggestion.url
+      );
+
+      if (targetLink) {
+        // Add highlight with a small delay to ensure it's visible after scroll
+        setTimeout(() => {
+          targetLink.classList.add('animate-highlight');
+          // Remove highlight after 1.5 seconds
+          setTimeout(() => {
+            targetLink.classList.remove('animate-highlight');
+            setLatestLinkText(null);
+          }, 1500);
+        }, 100);
+      }
+    }
     
-    // Remove validated suggestion from current suggestions
-    setSuggestions(prev => prev.filter(s => s.id !== suggestion.id));
-    
-    setSuccess(`Link validated for "${selectedTerm}"`);
   };
 
   // Copy to markdown (current format)
   const copyToMarkdown = async () => {
     try {
       await navigator.clipboard.writeText(text);
-      setSuccess('Markdown copied to clipboard!');
     } catch {
       setError('Failed to copy markdown');
     }
@@ -139,7 +166,6 @@ export function TextAnalyzer() {
     try {
       const htmlText = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
       await navigator.clipboard.writeText(htmlText);
-      setSuccess('HTML copied to clipboard!');
     } catch {
       setError('Failed to copy HTML');
     }
@@ -163,7 +189,6 @@ export function TextAnalyzer() {
       
       if (data.success) {
         await processAllCandidates(data.candidates);
-        setSuccess(`Extracted ${data.count} anchor candidates`);
       } else {
         setError(data.error || 'Failed to extract anchors');
       }
@@ -278,9 +303,7 @@ export function TextAnalyzer() {
         ]);
       }
       
-      if (suggestions.length > 0) {
-        setSuccess(`Found ${suggestions.length} suggestions for "${selectedText.text}"`);
-      } else {
+      if (suggestions.length === 0) {
         setError(`No suggestions found for "${selectedText.text}"`);
       }
       
@@ -292,12 +315,24 @@ export function TextAnalyzer() {
     }
   };
 
-  // Handle term selection from AnalyzedTerms
-  const handleTermSelect = (term: AnalyzedTerm) => {
-    startTransition(() => {
-      setSelectedTerm(term.text);
-      setSuggestions(term.suggestions);
-    });
+  // Fixed handleTermSelect - always fetch fresh suggestions
+  const handleTermSelect = async (term: AnalyzedTerm) => {
+    try {
+      // Always fetch fresh suggestions when selecting a term
+      const freshSuggestions = await getSuggestionsForCandidate(term.text);
+      
+      startTransition(() => {
+        setSelectedTerm(term.text);
+        setSuggestions(freshSuggestions);
+      });
+    } catch (err) {
+      console.error('Error fetching suggestions for term:', err);
+      // Fallback to stored suggestions if API fails
+      startTransition(() => {
+        setSelectedTerm(term.text);
+        setSuggestions(term.suggestions);
+      });
+    }
   };
 
   // Clear all data
@@ -309,7 +344,6 @@ export function TextAnalyzer() {
     setSelectedTerm(null);
     setValidatedAnchors([]);
     setError(null);
-    setSuccess(null);
   };
 
   const wordCount = text.trim().split(/\s+/).filter(word => word.length > 0).length;
@@ -328,24 +362,6 @@ export function TextAnalyzer() {
             <Alert variant="destructive">
               <AlertDescription className="flex items-center justify-between">
                 <span>{error}</span>
-                <Button variant="ghost" size="sm" onClick={clearMessages}>
-                  Dismiss
-                </Button>
-              </AlertDescription>
-            </Alert>
-          </motion.div>
-        )}
-        
-        {success && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-          >
-            <Alert className="border-green-200 bg-green-50">
-              <CheckCircle2 className="h-4 w-4 text-green-600" />
-              <AlertDescription className="flex items-center justify-between text-green-800">
-                <span>{success}</span>
                 <Button variant="ghost" size="sm" onClick={clearMessages}>
                   Dismiss
                 </Button>
@@ -394,7 +410,7 @@ export function TextAnalyzer() {
       {/* Rich Text Editor */}
       <Card className="border-2 shadow-lg relative hover:shadow-xl transition-all duration-300">
         <CardContent className="space-y-6 p-6">
-          <div className="flex items-center space-x-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+          <div ref={editorRef} className="flex items-center space-x-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200" style={{ scrollMarginTop: '8rem' }}>
             <div className="rounded-full bg-blue-100 p-2">
               <Brain className="w-5 h-5 text-blue-600" />
             </div>

@@ -2,7 +2,9 @@ import { motion } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckCircle2, Circle, Link, Target, Check } from 'lucide-react';
+import { CheckCircle2, Circle, Link, Target, Check, ChevronDown } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useState } from 'react';
 
 interface LinkSuggestion {
   id: string;
@@ -28,6 +30,8 @@ interface AnalyzedTermsProps {
 }
 
 export function AnalyzedTerms({ terms, selectedTerm, onTermSelect }: AnalyzedTermsProps) {
+  const [isNoSuggestionsOpen, setIsNoSuggestionsOpen] = useState(false);
+  
   if (terms.length === 0) return null;
 
   const validatedTerms = terms.filter(t => t.isValidated);
@@ -86,26 +90,30 @@ export function AnalyzedTerms({ terms, selectedTerm, onTermSelect }: AnalyzedTer
                 {validatedTerms.map((term, index) => (
                   <motion.div
                     key={`validated-${term.text}-${index}`}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
+                    initial={{ opacity: 0.8 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.1 }}
                   >
                     <Button
                       variant={selectedTerm === term.text ? "default" : "outline"}
                       onClick={() => onTermSelect(term)}
                       className={`w-full justify-between h-12 p-3 transition-all duration-200 ${
                         selectedTerm === term.text 
-                          ? 'bg-green-600 hover:bg-green-700 text-white border-green-600' 
-                          : 'bg-green-50 border-green-200 hover:bg-green-100 text-green-800'
+                          ? 'bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-500' 
+                          : 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-700'
                       }`}
                     >
                       <div className="flex items-center space-x-2">
-                        <Check className="w-4 h-4 text-green-600" />
+                        <Check className={`w-4 h-4 ${selectedTerm === term.text ? 'text-white' : 'text-emerald-500'}`} />
                         <span className="font-medium text-left">{term.text}</span>
                       </div>
                       
-                      <Badge className="text-xs bg-green-100 text-green-700 border-green-200">
-                        ✓ Validated
+                      <Badge className={`text-xs ${
+                        selectedTerm === term.text 
+                          ? 'bg-emerald-400 text-white border-emerald-300' 
+                          : 'bg-emerald-100 text-emerald-600 border-emerald-200'
+                      }`}>
+                        <Check className="w-3 h-3 mr-1" /> Validated
                       </Badge>
                     </Button>
                   </motion.div>
@@ -128,9 +136,9 @@ export function AnalyzedTerms({ terms, selectedTerm, onTermSelect }: AnalyzedTer
                 {termsWithResults.map((term, index) => (
                   <motion.div
                     key={`pending-${term.text}-${index}`}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
+                    initial={{ opacity: 0.8 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.1 }}
                   >
                     <Button
                       variant={selectedTerm === term.text ? "default" : "outline"}
@@ -164,44 +172,45 @@ export function AnalyzedTerms({ terms, selectedTerm, onTermSelect }: AnalyzedTer
 
           {/* Terms without results */}
           {termsWithoutResults.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Circle className="w-4 h-4 text-gray-400" />
-                <h4 className="font-medium text-gray-900">
-                  No Suggestions ({termsWithoutResults.length})
-                </h4>
-              </div>
+            <Collapsible open={isNoSuggestionsOpen} onOpenChange={setIsNoSuggestionsOpen}>
+              <CollapsibleTrigger asChild>
+                <div className="flex items-center justify-between py-2 cursor-pointer group">
+                  <div className="flex items-center space-x-2">
+                    <Circle className="w-4 h-4 text-gray-400" />
+                    <h4 className="font-medium text-gray-900">
+                      No Suggestions ({termsWithoutResults.length})
+                    </h4>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${isNoSuggestionsOpen ? 'transform rotate-180' : ''}`} />
+                </div>
+              </CollapsibleTrigger>
               
-              <div className="grid grid-cols-2 gap-2">
-                {termsWithoutResults.map((term, index) => (
+              <CollapsibleContent>
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  {termsWithoutResults.map((term, index) => (
                   <motion.div
                     key={`empty-${term.text}-${index}`}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
+                    initial={{ opacity: 0.8 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.1 }}
                   >
-                    <Button
-                      variant={selectedTerm === term.text ? "default" : "outline"}
-                      onClick={() => onTermSelect(term)}
-                      className={`w-full justify-between h-10 p-3 transition-all duration-200 ${
-                        selectedTerm === term.text 
-                          ? 'bg-gray-600 hover:bg-gray-700 text-white border-gray-600' 
-                          : 'bg-gray-50 border-gray-200 hover:bg-gray-100 text-gray-600'
-                      }`}
+                    <div
+                      className="flex items-center justify-between h-10 p-3 transition-all duration-200 rounded-md border bg-gray-50 border-gray-200 text-gray-400"
                     >
                       <div className="flex items-center space-x-2">
                         <Circle className="w-3 h-3" />
                         <span className="font-medium text-left text-sm">{term.text}</span>
                       </div>
                       
-                      <Badge className="text-xs bg-gray-100 text-gray-600 border-gray-200">
+                      <Badge className="text-xs bg-gray-100 text-gray-400 border-gray-200">
                         0
                       </Badge>
-                    </Button>
+                    </div>
                   </motion.div>
                 ))}
               </div>
-            </div>
+            </CollapsibleContent>
+          </Collapsible>
           )}
         </CardContent>
       </Card>
