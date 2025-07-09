@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { TextEditor } from './TextEditor';
 import { AnalyzedTerms } from './AnalyzedTerms';
+import { SuggestionsList } from './SuggestionsList';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 interface LinkSuggestion {
@@ -121,17 +122,29 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
   // Process all candidates for suggestions
   const processAllCandidates = async (candidates: string[]) => {
     const newTerms: AnalyzedTerm[] = [];
+    const seenSuggestions = new Set<string>(); // Track seen suggestion IDs
     
     for (const candidate of candidates) {
       try {
-        const suggestions = await getSuggestionsForCandidate(candidate);
+        const allSuggestions = await getSuggestionsForCandidate(candidate);
+        
+        // Filter out suggestions we've already seen
+        const uniqueSuggestions = allSuggestions.filter(suggestion => {
+          if (seenSuggestions.has(suggestion.id)) {
+            return false;
+          }
+          seenSuggestions.add(suggestion.id);
+          return true;
+        });
         
         newTerms.push({
           text: candidate,
-          hasResults: suggestions.length > 0,
-          suggestionCount: suggestions.length,
-          suggestions
+          hasResults: uniqueSuggestions.length > 0,
+          suggestionCount: uniqueSuggestions.length,
+          suggestions: uniqueSuggestions
         });
+        
+        console.log(`📝 ${candidate}: ${uniqueSuggestions.length} unique suggestions (${allSuggestions.length} total)`);
         
         // Update state incrementally for better UX
         setAnalyzedTerms([...newTerms]);
@@ -139,8 +152,8 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
         // Small delay to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 100));
         
-      } catch (error) {
-        console.error(`Failed to get suggestions for "${candidate}":`, error);
+      } catch (err) {
+        console.error(`Error processing candidate "${candidate}":`, err);
         newTerms.push({
           text: candidate,
           hasResults: false,
@@ -150,9 +163,20 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
       }
     }
     
+    // Sort by most suggestions first
+    newTerms.sort((a, b) => b.suggestionCount - a.suggestionCount);
+    
     setAnalyzedTerms(newTerms);
-    const withResults = newTerms.filter(t => t.hasResults).length;
-    setSuccess(`Analysis complete: ${withResults}/${candidates.length} candidates have suggestions`);
+    
+    // Auto-select the first term with results
+    const firstWithResults = newTerms.find(term => term.hasResults);
+    if (firstWithResults) {
+      setSelectedTerm(firstWithResults.text);
+      setSuggestions(firstWithResults.suggestions);
+    }
+    
+    console.log(`✅ Processed ${newTerms.length} candidates with ${seenSuggestions.size} unique suggestions total`);
+    setSuccess(`Analysis complete: ${newTerms.filter(t => t.hasResults).length}/${candidates.length} candidates have suggestions`);
   };
 
   // Get suggestions for a single candidate
@@ -417,87 +441,26 @@ N'oubliez pas que le timing saisonnier joue un rôle déterminant dans le succè
           
           {/* Current suggestions display */}
           {selectedTerm && (
-            <Card className="border-2 shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-3">
-                  <div className="rounded-full bg-green-100 p-2">
-                    <Link className="w-5 h-5 text-green-600" />
-                  </div>
-                  <span>Suggestions for "{selectedTerm}"</span>
-                  <Badge variant="secondary" className="min-w-[80px] text-center">
-                    {suggestions.length} found
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4" style={{ minHeight: '300px' }}>
-                  {suggestions.length > 0 ? (
-                    suggestions.map((suggestion, index) => (
-                      <div
-                        key={suggestion.id}
-                        className="border rounded-xl p-4 hover:bg-gray-50 transition-all duration-200"
-                      >
-                        <div className="space-y-3">
-                          <div className="flex items-start justify-between">
-                            <h4 className="font-medium text-gray-900 leading-tight line-clamp-2">
-                              {suggestion.title}
-                            </h4>
-                            <div className="flex items-center space-x-2 flex-shrink-0 ml-3">
-                              <Badge variant="outline" className="text-xs whitespace-nowrap">
-                                {suggestion.matchedSection}
-                              </Badge>
-                              <Badge variant="outline" className="text-xs whitespace-nowrap">
-                                <Target className="w-3 h-3 mr-1" />
-                                {Math.round(suggestion.relevanceScore * 100)}%
-                              </Badge>
-                            </div>
-                          </div>
-                          
-                          <p className="text-sm text-gray-600 leading-relaxed line-clamp-2">
-                            {suggestion.description}
-                          </p>
-                          
-                          <div className="flex items-center justify-between">
-                            <div className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded truncate max-w-[200px]">
-                              {suggestion.url}
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => copyLink(suggestion.url)}
-                                className="text-xs"
-                              >
-                                <Copy className="w-3 h-3 mr-1" />
-                                Copy
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                asChild
-                                className="text-xs"
-                              >
-                                <a href={suggestion.url} target="_blank" rel="noopener noreferrer">
-                                  <ExternalLink className="w-3 h-3 mr-1" />
-                                  Open
-                                </a>
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
+            <div className="space-y-4" style={{ minHeight: '300px' }}>
+              {suggestions.length > 0 ? (
+                <SuggestionsList 
+                  suggestions={suggestions}
+                  onCopyLink={copyLink}
+                  selectedTerm={selectedTerm}
+                />
+              ) : (
+                <Card className="border-2 shadow-lg">
+                  <CardContent>
                     <div className="flex items-center justify-center h-[300px] text-gray-500">
                       <div className="text-center">
                         <div className="text-sm">No suggestions found</div>
                         <div className="text-xs mt-1">for "{selectedTerm}"</div>
                       </div>
                     </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           )}
         </div>
       )}

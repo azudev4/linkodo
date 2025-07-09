@@ -16,9 +16,10 @@ interface LinkSuggestion {
 interface SuggestionsListProps {
   suggestions: LinkSuggestion[];
   onCopyLink: (url: string) => void;
+  selectedTerm?: string;
 }
 
-export function SuggestionsList({ suggestions, onCopyLink }: SuggestionsListProps) {
+export function SuggestionsList({ suggestions, onCopyLink, selectedTerm }: SuggestionsListProps) {
   if (suggestions.length === 0) return null;
 
   return (
@@ -32,7 +33,7 @@ export function SuggestionsList({ suggestions, onCopyLink }: SuggestionsListProp
             <div className="rounded-full bg-green-100 p-2">
               <Link className="w-5 h-5 text-green-600" />
             </div>
-            <span>Link Suggestions</span>
+            <span>{selectedTerm ? `Suggestions for "${selectedTerm}"` : 'Link Suggestions'}</span>
             <Badge variant="secondary">
               {suggestions.length} found
             </Badge>

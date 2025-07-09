@@ -49,7 +49,7 @@ PRIORITY TARGETS :
 
 QUALITY GUIDELINES:
 - Length: 1-5 words optimal 
-- Specificity: Specific terms over generic ones
+- Specificity: Specific KEYWORDS over generic ones
 - Search intent: Terms people would actually search for help with
 
 AVOID:
@@ -61,6 +61,7 @@ AVOID:
 OUTPUT:
 - Maximum 100 candidates
 - JSON array format only: ["term1", "term2", ...]
+- NO DUPLICATES - each term should be unique
 
 Example candidates: ["wall mounting", "drill bits", "soil preparation", "safety equipment", "paint primer", "pest control", "insulation types", "wood staining", "pipe fitting", "pruning techniques"]`
         },
@@ -70,7 +71,7 @@ Example candidates: ["wall mounting", "drill bits", "soil preparation", "safety 
         }
       ],
       temperature: 0.3,
-      max_tokens: 1000
+      max_tokens: 1500
     });
     
     const content = response.choices[0].message.content?.trim();
