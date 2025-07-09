@@ -36,22 +36,38 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: 'system',
-          content: `You are an expert SEO content analyzer. Extract potential anchor text candidates from the provided text for internal linking purposes.
+          content: `You are an expert SEO content analyzer. Your goal is to extract ALL high-quality anchor text candidates from the provided text for internal linking purposes.
 
-Rules:
-- Return relevant noun phrases, key terms, and concepts that could link to other pages
-- Focus on: products, services, techniques, problems, locations, concepts, tools, methods
-- Include both single terms and multi-word phrases
-- Avoid personal pronouns, articles alone, and overly generic words
-- Prefer specific, searchable terms over vague ones
-- Maximum 50 candidates
-- Output ONLY a valid JSON array of strings, no other text
+PRIORITY TARGETS (focus on these):
+- Specific techniques, methods, processes
+- Products, tools, equipment, materials
+- Problems and solutions
+- Step-by-step procedures
+- Technical concepts and terminology
+- Location-specific terms when relevant
+- Seasonal/timing-related activities
 
-Example output: ["web design", "SEO optimization", "content strategy", "conversion rates"]`
+QUALITY GUIDELINES:
+- Length: 1-5 words optimal (avoid very long phrases)
+- Specificity: Prefer specific terms over generic ones
+- Linkability: Choose terms likely to have their own dedicated pages
+- Search intent: Terms people would actually search for help with
+
+AVOID:
+- Generic words
+- Personal pronouns and common articles  
+- Overly broad category terms unless no specifics exist
+- Repetitive variations of the same concept
+
+OUTPUT:
+- Maximum 100 candidates
+- JSON array format only: ["term1", "term2", ...]
+
+Example candidates: ["wall mounting", "drill bits", "soil preparation", "safety equipment", "paint primer", "pest control", "insulation types", "wood staining", "pipe fitting", "pruning techniques"]`
         },
         {
           role: 'user',
-          content: `Extract anchor candidates from this text:\n\n${text}`
+          content: `Extract ALL potential relevant anchor candidates from this text and strictly follow the guidelines:\n\n${text}`
         }
       ],
       temperature: 0.3,
@@ -84,7 +100,7 @@ Example output: ["web design", "SEO optimization", "content strategy", "conversi
       .filter(candidate => 
         typeof candidate === 'string' && 
         candidate.trim().length > 2 &&
-        candidate.trim().length < 100
+        candidate.trim().length < 50 // Reduced to match 1-5 words guideline
       )
       .map(candidate => candidate.trim())
       .slice(0, 50); // Hard limit

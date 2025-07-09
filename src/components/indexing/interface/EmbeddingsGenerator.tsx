@@ -2,8 +2,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { motion } from 'framer-motion';
-import { Sparkles, Loader2, Zap } from 'lucide-react';
+import { Sparkles, Loader2, Zap, Trash2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useState } from 'react';
 
 interface DatabaseStats {
   totalPages: number;
@@ -26,6 +27,33 @@ export function EmbeddingsGenerator({
   isGenerating,
   progress
 }: EmbeddingsGeneratorProps) {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteEmbeddings = async () => {
+    if (!window.confirm('Are you sure you want to delete all embeddings? This action cannot be undone.')) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch('/api/reset-embeddings', {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete embeddings');
+      }
+
+      // Refresh the page to update stats
+      window.location.reload();
+    } catch (error) {
+      console.error('Error deleting embeddings:', error);
+      alert('Failed to delete embeddings. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <Card className="border-2 shadow-lg hover:shadow-xl transition-all duration-300">
       <CardHeader>
@@ -84,34 +112,54 @@ export function EmbeddingsGenerator({
           </motion.div>
         )}
 
-        {/* Generate Button */}
-        {stats ? (
-          <Button
-            onClick={onGenerate}
-            disabled={stats.pagesWithoutEmbeddings === 0 || isGenerating}
-            className="w-full h-12 rounded-xl bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
-            size="lg"
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                <span className="font-medium">Generating...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-5 h-5 mr-2" />
-                <span className="font-medium">
-                  {stats.pagesWithoutEmbeddings > 0 
-                    ? `Generate ${stats.pagesWithoutEmbeddings} Embeddings`
-                    : 'All Embeddings Generated'
-                  }
-                </span>
-              </>
-            )}
-          </Button>
-        ) : (
-          <Skeleton variant="button" className="w-full h-12" />
-        )}
+        {/* Button Group */}
+        <div className="flex gap-2">
+          {/* Generate Button */}
+          {stats ? (
+            <Button
+              onClick={onGenerate}
+              disabled={stats.pagesWithoutEmbeddings === 0 || isGenerating || isDeleting}
+              className="flex-1 h-12 rounded-xl bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
+              size="lg"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  <span className="font-medium">Generating...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-5 h-5 mr-2" />
+                  <span className="font-medium">
+                    {stats.pagesWithoutEmbeddings > 0 
+                      ? `Generate ${stats.pagesWithoutEmbeddings} Embeddings`
+                      : 'All Embeddings Generated'
+                    }
+                  </span>
+                </>
+              )}
+            </Button>
+          ) : (
+            <Skeleton variant="button" className="flex-1 h-12" />
+          )}
+
+          {/* Delete Button */}
+          {stats && stats.pagesWithEmbeddings > 0 && (
+            <Button
+              onClick={handleDeleteEmbeddings}
+              disabled={isGenerating || isDeleting}
+              variant="destructive"
+              className="h-12 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
+              size="lg"
+            >
+              {isDeleting ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Trash2 className="w-5 h-5" />
+              )}
+            </Button>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
