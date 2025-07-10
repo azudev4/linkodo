@@ -102,29 +102,117 @@ export function TextAnalyzer() {
     setError(null);
   };
 
-  // Fixed validateLink - handles replacing existing links and updating state
+  // 🎯 FINAL CLEAN VERSION - Handles Unicode apostrophes, French articles, and invisible characters
   const validateLink = (suggestion: LinkSuggestion) => {
     if (!selectedTerm) return;
     
+    console.log(`🔗 Validating: "${selectedTerm}"`);
+    
     const newMarkdownLink = `[${selectedTerm}](${suggestion.url})`;
     
-    // Check if this term already has a markdown link
+    // 1. CHARACTER NORMALIZATION
+    const normalizeText = (str: string) => {
+      return str
+        .replace(/\r\n/g, ' ')          // Windows line endings
+        .replace(/\r/g, ' ')            // Mac line endings  
+        .replace(/\n/g, ' ')            // Unix line endings
+        .replace(/\t/g, ' ')            // Tabs
+        .replace(/'/g, "'")             // Unicode apostrophe → ASCII
+        .replace(/'/g, "'")             // Other apostrophe variations
+        .replace(/`/g, "'")             // Grave accent
+        .replace(/\s+/g, ' ')           // Multiple spaces → single space
+        .trim();
+    };
+    
+    const normalizedText = normalizeText(text);
+    const normalizedTerm = normalizeText(selectedTerm);
+    
+    let updatedText;
+    let replacementMade = false;
+    
+    // 2. CHECK EXISTING LINKS FIRST
     const existingLinkRegex = new RegExp(`\\[${selectedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]\\([^)]+\\)`, 'g');
     const hasExistingLink = existingLinkRegex.test(text);
     
-    let updatedText;
     if (hasExistingLink) {
-      // Replace existing markdown link for this term
+      // Replace existing link
       updatedText = text.replace(existingLinkRegex, newMarkdownLink);
-    } else {
-      // Create new markdown link for plain text term
-      const termRegex = new RegExp(`\\b${selectedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
-      updatedText = text.replace(termRegex, newMarkdownLink);
+      replacementMade = true;
+      console.log(`✅ Replaced existing link`);
     }
     
+    // 3. CREATE NEW LINK - Direct test then with articles
+    else if (normalizedText.includes(normalizedTerm)) {
+      
+      // Create flexible pattern to handle variable apostrophes and spaces
+      const createFlexiblePattern = (term: string, withArticle = '') => {
+        const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const withFlexibleSpaces = escaped.replace(/\s+/g, '\\s+');
+        const withFlexibleApostrophes = withFlexibleSpaces.replace(/'/g, '.');
+        return withArticle ? `${withArticle}\\s+${withFlexibleApostrophes}` : withFlexibleApostrophes;
+      };
+      
+      // APPROACH 1: Direct term
+      const directPattern = createFlexiblePattern(selectedTerm);
+      const directRegex = new RegExp(directPattern, 'g');
+      
+      updatedText = text.replace(directRegex, newMarkdownLink);
+      if (updatedText !== text) {
+        replacementMade = true;
+        console.log(`✅ Direct replacement successful`);
+      }
+      
+      // APPROACH 2: With French articles
+      if (!replacementMade) {
+        const articles = ['un', 'une', 'le', 'la', 'des', 'du', 'de'];
+        
+        for (const article of articles) {
+          const articlePattern = createFlexiblePattern(selectedTerm, article);
+          const articleRegex = new RegExp(articlePattern, 'g');
+          
+          // Replace while keeping the article
+          const replacement = `${article} ${newMarkdownLink}`;
+          updatedText = text.replace(articleRegex, replacement);
+          
+          if (updatedText !== text) {
+            replacementMade = true;
+            console.log(`✅ Replacement with article "${article}" successful`);
+            break;
+          }
+        }
+      }
+    }
+    
+    // 4. FINAL VERIFICATION
+    if (!replacementMade || !updatedText || updatedText === text) {
+      console.error(`❌ Validation failed for "${selectedTerm}"`);
+      setError(`Unable to create link for "${selectedTerm}".`);
+      return;
+    }
+    
+    // 5. PROTECTION AGAINST MULTIPLE LINKS
+    // Count term occurrences to ensure we only replace one
+    const termOccurrences = (text.match(new RegExp(selectedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+    const linkOccurrences = (updatedText.match(/\[.*?\]\(.*?\)/g) || []).length - (text.match(/\[.*?\]\(.*?\)/g) || []).length;
+    
+    if (linkOccurrences > 1) {
+      console.warn(`⚠️ Multiple links created for "${selectedTerm}", keeping only first occurrence`);
+      // If multiple links created, keep only the first one
+      const firstLinkPattern = new RegExp(`\\[${selectedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]\\([^)]+\\)`);
+      const firstMatch = updatedText.match(firstLinkPattern);
+      if (firstMatch) {
+        const beforeFirst = updatedText.substring(0, updatedText.indexOf(firstMatch[0]));
+        const afterFirst = updatedText.substring(updatedText.indexOf(firstMatch[0]) + firstMatch[0].length);
+        // Replace other link occurrences with simple term
+        const cleanedAfter = afterFirst.replace(new RegExp(`\\[${selectedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]\\([^)]+\\)`, 'g'), selectedTerm);
+        updatedText = beforeFirst + firstMatch[0] + cleanedAfter;
+      }
+    }
+    
+    // 6. STATE UPDATES
+    console.log(`🎉 SUCCESS! Link created for "${selectedTerm}"`);
     setText(updatedText);
     
-    // Remove existing validation for this term before adding new one
     setValidatedAnchors(prev => {
       const filtered = prev.filter(anchor => anchor.anchorText !== selectedTerm);
       return [...filtered, {
@@ -134,7 +222,6 @@ export function TextAnalyzer() {
       }];
     });
     
-    // Mark term as validated in analyzed terms
     setAnalyzedTerms(prev => 
       prev.map(term => 
         term.text === selectedTerm 
@@ -143,10 +230,8 @@ export function TextAnalyzer() {
       )
     );
 
-    // Set latest link for highlighting
     setLatestLinkText(selectedTerm);
 
-    // Smooth scroll to editor
     if (editorRef.current) {
       editorRef.current.scrollIntoView({ 
         behavior: 'smooth',
