@@ -238,7 +238,7 @@ export function TextAnalyzer() {
           block: 'start'
         });
       }
-    }, 100); // Increased delay to ensure DOM is fully updated
+    }, 10); // Reduced delay for faster response while still ensuring DOM update
   };
 
   // Copy to markdown (current format)
