@@ -150,6 +150,22 @@ export function TextAnalyzer() {
           console.log(`🗑️ Removed overlapping link: ${link} -> ${linkText}`);
         }
       });
+
+      // Remove overlapping terms from analyzedTerms
+      setAnalyzedTerms(prev => 
+        prev.filter(term => !overlappingLinks.some(link => {
+          const linkText = link.match(/\[([^\]]+)\]/)?.[1];
+          return linkText === term.text;
+        }))
+      );
+
+      // Remove overlapping anchors from validatedAnchors  
+      setValidatedAnchors(prev =>
+        prev.filter(anchor => !overlappingLinks.some(link => {
+          const linkText = link.match(/\[([^\]]+)\]/)?.[1];
+          return linkText === anchor.anchorText;
+        }))
+      );
     }
     
     // 3. NOW PROCEED WITH NORMAL REPLACEMENT LOGIC

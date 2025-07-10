@@ -39,7 +39,9 @@ export function SuggestionsList({
 
   // Check if a suggestion is already validated
   const isValidated = (suggestionId: string) => {
-    return validatedAnchors.some(anchor => anchor.suggestionId === suggestionId);
+    return validatedAnchors.some(anchor => 
+      anchor.suggestionId === suggestionId && anchor.anchorText === selectedTerm
+    );
   };
 
   return (
