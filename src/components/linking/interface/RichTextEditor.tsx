@@ -63,6 +63,51 @@ export function RichTextEditor({
       .replace(/<[^>]*>/g, '');
   };
 
+  // Helper function to get cursor position as character offset from start of text content
+  const getTextOffset = (container: Node, node: Node, offset: number): number => {
+    const walker = document.createTreeWalker(
+      container,
+      NodeFilter.SHOW_TEXT,
+      null,
+    );
+    
+    let textOffset = 0;
+    let currentNode;
+    while (currentNode = walker.nextNode()) {
+      if (currentNode === node) {
+        return textOffset + offset;
+      }
+      textOffset += currentNode.textContent?.length || 0;
+    }
+    return textOffset;
+  };
+
+  // Helper function to restore cursor position from character offset
+  const setTextOffset = (container: Node, targetOffset: number): void => {
+    const walker = document.createTreeWalker(
+      container,
+      NodeFilter.SHOW_TEXT,
+      null,
+    );
+    
+    let currentOffset = 0;
+    let currentNode;
+    while (currentNode = walker.nextNode()) {
+      const nodeLength = currentNode.textContent?.length || 0;
+      if (currentOffset + nodeLength >= targetOffset) {
+        const localOffset = targetOffset - currentOffset;
+        const range = document.createRange();
+        range.setStart(currentNode, localOffset);
+        range.setEnd(currentNode, localOffset);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        return;
+      }
+      currentOffset += nodeLength;
+    }
+  };
+
   // Handle error state changes
   useEffect(() => {
     const wasLoading = prevLoadingRef.current;
@@ -163,9 +208,25 @@ export function RichTextEditor({
   // Handle content changes
   const handleInput = useCallback(() => {
     if (editorRef.current) {
+      // Save cursor position before state change
+      const selection = window.getSelection();
+      let savedTextOffset = 0;
+      
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        savedTextOffset = getTextOffset(editorRef.current, range.startContainer, range.startOffset);
+      }
+      
       const htmlContent = editorRef.current.innerHTML;
       const markdownContent = htmlToMarkdown(htmlContent);
       onTextChange(markdownContent);
+      
+      // Restore cursor position after DOM updates
+      setTimeout(() => {
+        if (editorRef.current) {
+          setTextOffset(editorRef.current, savedTextOffset);
+        }
+      }, 0);
     }
   }, [onTextChange]);
 
@@ -252,11 +313,86 @@ export function RichTextEditor({
     document.execCommand('insertText', false, text);
   }, []);
 
-  // Prevent default formatting shortcuts
+  // Handle keydown events with anchor deletion logic
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Prevent default formatting shortcuts
     if (e.ctrlKey || e.metaKey) {
       if (['b', 'i', 'u'].includes(e.key.toLowerCase())) {
         e.preventDefault();
+      }
+      return;
+    }
+
+    // Handle backspace for anchor deletion
+    if (e.key === 'Backspace') {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return;
+
+      const range = selection.getRangeAt(0);
+      const { startContainer, startOffset } = range;
+      
+      // Case 1: Cursor is anywhere inside an anchor element
+      const anchorElement = startContainer.nodeType === Node.TEXT_NODE 
+        ? startContainer.parentElement?.closest('a') 
+        : (startContainer as Element)?.closest('a');
+      
+      if (anchorElement) {
+        // Remove the link but keep the text when cursor is anywhere inside anchor
+        e.preventDefault();
+        
+        const anchorText = anchorElement.textContent || '';
+        const textNode = document.createTextNode(anchorText);
+        anchorElement.parentNode?.replaceChild(textNode, anchorElement);
+        
+        // Trigger input event to update markdown (handleInput will preserve cursor)
+        if (editorRef.current) {
+          const inputEvent = new Event('input', { bubbles: true });
+          editorRef.current.dispatchEvent(inputEvent);
+        }
+        
+        return;
+      }
+      
+      // Case 2: Cursor is just after an anchor (between anchor and next content)
+      if (startContainer.nodeType === Node.TEXT_NODE && startOffset === 0) {
+        const previousSibling = startContainer.previousSibling;
+        if (previousSibling && previousSibling.nodeName === 'A') {
+          // Remove the anchor, keep the text
+          e.preventDefault();
+          
+          const anchorText = previousSibling.textContent || '';
+          const textNode = document.createTextNode(anchorText);
+          previousSibling.parentNode?.replaceChild(textNode, previousSibling);
+          
+          // Trigger input event to update markdown (handleInput will preserve cursor)
+          if (editorRef.current) {
+            const inputEvent = new Event('input', { bubbles: true });
+            editorRef.current.dispatchEvent(inputEvent);
+          }
+          
+          return;
+        }
+      }
+      
+      // Case 3: Check if we're about to delete into an anchor from the right
+      if (startContainer.nodeType === Node.ELEMENT_NODE && startOffset > 0) {
+        const elementBefore = startContainer.childNodes[startOffset - 1];
+        if (elementBefore && elementBefore.nodeName === 'A') {
+          // We're about to backspace into an anchor from outside
+          e.preventDefault();
+          
+          const anchorText = elementBefore.textContent || '';
+          const textNode = document.createTextNode(anchorText);
+          elementBefore.parentNode?.replaceChild(textNode, elementBefore);
+          
+          // Trigger input event to update markdown (handleInput will preserve cursor)
+          if (editorRef.current) {
+            const inputEvent = new Event('input', { bubbles: true });
+            editorRef.current.dispatchEvent(inputEvent);
+          }
+          
+          return;
+        }
       }
     }
   }, []);
