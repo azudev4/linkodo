@@ -52,21 +52,7 @@ export function Header({ className }: HeaderProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isNotificationOpen, isProfileOpen]);
 
-  // Get page title based on current route
-  const getPageTitle = () => {
-    switch (pathname) {
-      case '/':
-        return 'Content Analysis';
-      case '/indexing':
-        return 'Data Indexing';
-      case '/suggestions':
-        return 'Suggestions';
-      case '/settings':
-        return 'Settings';
-      default:
-        return 'LinkSuggest';
-    }
-  };
+
 
   // Mock notifications
   const notifications = [
@@ -93,7 +79,6 @@ export function Header({ className }: HeaderProps) {
           {/* Left section - Page title */}
           <div className="flex items-center">
             <h1 className="text-lg font-medium text-gray-900">
-              {getPageTitle()}
             </h1>
           </div>
 

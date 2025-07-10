@@ -6,12 +6,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   FileText, 
   Loader2, 
   Sparkles,
-  Zap,
   Brain,
   Copy,
   Code
@@ -365,7 +363,6 @@ export function TextAnalyzer() {
     if (!selectedText) return;
     
     setIsLoading(true);
-    clearMessages();
     
     try {
       const suggestions = await getSuggestionsForCandidate(selectedText.text);
@@ -391,19 +388,25 @@ export function TextAnalyzer() {
         ]);
       }
       
-      if (suggestions.length === 0) {
-        setError(`No suggestions found for "${selectedText.text}"`);
-      } else {
+      if (suggestions.length > 0) {
+        // Clear any previous errors on success
+        setError(null);
         // Scroll to suggestions after a small delay to ensure rendering
         setTimeout(() => {
           suggestionsRef.current?.scrollIntoView({ 
             behavior: 'smooth',
             block: 'start'
           });
+          // Clear selection only after scrolling starts
+          setTimeout(() => {
+            setSelectedText(null);
+          }, 100);
         }, 100);
+      } else {
+        // Set error state for no suggestions (but don't show notification)
+        setError('no-suggestions');
       }
       
-      setSelectedText(null);
     } catch (err) {
       setError('Error finding suggestions');
     } finally {
@@ -435,26 +438,6 @@ export function TextAnalyzer() {
 
   return (
     <div className="space-y-6">
-      {/* Messages */}
-      <AnimatePresence>
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-          >
-            <Alert variant="destructive">
-              <AlertDescription className="flex items-center justify-between">
-                <span>{error}</span>
-                <Button variant="ghost" size="sm" onClick={clearMessages}>
-                  Dismiss
-                </Button>
-              </AlertDescription>
-            </Alert>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Header */}
       <Card className="border-2 shadow-lg hover:shadow-xl transition-all duration-300">
         <CardHeader className="space-y-3">
@@ -512,6 +495,7 @@ export function TextAnalyzer() {
               findLinkSuggestions();
             }}
             isLoading={isLoading}
+            error={error}
           />
 
           <div className="flex items-center justify-between pt-4">

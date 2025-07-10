@@ -1,7 +1,7 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { MousePointer, Search } from 'lucide-react';
+import { MousePointer, Search, Loader2, X } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { LinkHoverCard } from './LinkHoverCard';
 
@@ -23,6 +23,7 @@ interface RichTextEditorProps {
   onSelectionChange: (selection: Selection | null) => void;
   onFindLinks: () => void;
   isLoading: boolean;
+  error?: string | null;
 }
 
 export function RichTextEditor({
@@ -31,7 +32,8 @@ export function RichTextEditor({
   selectedText,
   onSelectionChange,
   onFindLinks,
-  isLoading
+  isLoading,
+  error
 }: RichTextEditorProps) {
   const isMobile = useIsMobile();
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -39,10 +41,12 @@ export function RichTextEditor({
   const [showHoverCard, setShowHoverCard] = useState(false);
   const [hoverCardUrl, setHoverCardUrl] = useState('');
   const [hoverCardPosition, setHoverCardPosition] = useState({ x: 0, y: 0 });
+  const [showErrorState, setShowErrorState] = useState(false);
   
   const editorRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const prevLoadingRef = useRef<boolean>(false);
 
   // Convert markdown to HTML
   const markdownToHtml = (markdown: string): string => {
@@ -58,6 +62,28 @@ export function RichTextEditor({
       .replace(/<br\s*\/?>/g, '\n')
       .replace(/<[^>]*>/g, '');
   };
+
+  // Handle error state changes
+  useEffect(() => {
+    const wasLoading = prevLoadingRef.current;
+    prevLoadingRef.current = isLoading;
+    
+    if (error) {
+      setShowErrorState(true);
+      // Show error state for 1.5 seconds, then hide context menu
+      const timer = setTimeout(() => {
+        setShowErrorState(false);
+        setShowContextMenu(false);
+      }, 1500);
+      return () => clearTimeout(timer);
+    } else if (wasLoading && !isLoading) {
+      // Success case - close menu after brief delay
+      const timer = setTimeout(() => {
+        setShowContextMenu(false);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [error, isLoading]);
 
   // Handle scroll events
   useEffect(() => {
@@ -190,6 +216,7 @@ export function RichTextEditor({
     });
     
     setShowContextMenu(true);
+    setShowErrorState(false); // Reset error state when opening menu
   }, [selectedText, onSelectionChange, getSelectedText]);
 
   // Close context menu when clicking elsewhere
@@ -197,6 +224,7 @@ export function RichTextEditor({
     const handleClickOutside = (event: MouseEvent) => {
       if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node)) {
         setShowContextMenu(false);
+        setShowErrorState(false);
       }
     };
 
@@ -232,6 +260,34 @@ export function RichTextEditor({
       }
     }
   }, []);
+
+  // Get button styles based on state
+  const getButtonState = () => {
+    if (isLoading) {
+      return {
+        variant: "default" as const,
+        className: "",
+        icon: <Loader2 className="w-3 h-3 mr-1 animate-spin" />,
+        text: "Find Links"
+      };
+    } else if (showErrorState) {
+      return {
+        variant: "destructive" as const,
+        className: "animate-pulse",
+        icon: <X className="w-3 h-3 mr-1" />,
+        text: "No Links"
+      };
+    } else {
+      return {
+        variant: "default" as const,
+        className: "",
+        icon: <Search className="w-3 h-3 mr-1" />,
+        text: "Find Links"
+      };
+    }
+  };
+
+  const buttonState = getButtonState();
 
   return (
     <div className="relative">
@@ -277,11 +333,12 @@ export function RichTextEditor({
           <Button
             onClick={onFindLinks}
             disabled={isLoading}
+            variant={buttonState.variant}
             size="sm"
-            className="h-7 px-3 text-xs bg-blue-600 hover:bg-blue-700"
+            className={`h-7 px-3 text-xs transition-all duration-300 ${buttonState.className}`}
           >
-            <Search className="w-3 h-3 mr-1" />
-            Find Links
+            {buttonState.icon}
+            {buttonState.text}
           </Button>
         </motion.div>
       )}
@@ -306,20 +363,36 @@ export function RichTextEditor({
             >
               {selectedText ? (
                 <button
-                  onClick={() => {
-                    onFindLinks();
-                    setShowContextMenu(false);
-                  }}
+                  onClick={onFindLinks}
                   disabled={isLoading}
-                  className="w-full px-4 py-3 text-left hover:bg-blue-50 rounded-lg flex items-center space-x-3 transition-colors group disabled:opacity-50"
+                  className={`w-full px-4 py-3 text-left rounded-lg flex items-center space-x-3 transition-all duration-300 group disabled:opacity-50 ${
+                    showErrorState 
+                      ? 'bg-red-50 hover:bg-red-100' 
+                      : 'hover:bg-blue-50'
+                  }`}
                 >
-                  <div className="rounded-full bg-blue-100 p-2 group-hover:bg-blue-200 transition-colors">
-                    <Search className="w-4 h-4 text-blue-600" />
+                  <div className={`rounded-full p-2 transition-all duration-300 ${
+                    showErrorState 
+                      ? 'bg-red-100 group-hover:bg-red-200 animate-pulse' 
+                      : 'bg-blue-100 group-hover:bg-blue-200'
+                  }`}>
+                    {isLoading ? (
+                      <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                    ) : showErrorState ? (
+                      <X className="w-4 h-4 text-red-600" />
+                    ) : (
+                      <Search className="w-4 h-4 text-blue-600" />
+                    )}
                   </div>
                   <div className="flex-1">
-                    <div className="font-medium text-gray-900">Find Links</div>
-                    <div className="text-xs text-gray-500">
-                      Search for "{selectedText.text.substring(0, 25)}{selectedText.text.length > 25 ? '...' : ''}"
+                    <div className={`font-medium ${showErrorState ? 'text-red-900' : 'text-gray-900'}`}>
+                      {showErrorState ? 'No Links Found' : 'Find Links'}
+                    </div>
+                    <div className={`text-xs ${showErrorState ? 'text-red-600' : 'text-gray-500'}`}>
+                      {showErrorState 
+                        ? 'No suggestions available'
+                        : `Search for "${selectedText.text.substring(0, 25)}${selectedText.text.length > 25 ? '...' : ''}"`
+                      }
                     </div>
                   </div>
                 </button>

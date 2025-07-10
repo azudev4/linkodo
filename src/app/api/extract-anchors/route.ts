@@ -49,17 +49,17 @@ PRIORITY TARGETS :
 
 QUALITY GUIDELINES:
 - Length: 1-5 words optimal 
-- Specificity: Specific KEYWORDS over generic ones
+- Specificity: Strictly extract SPECIFIC  KEYWORDS over generic ones
 - Search intent: Terms people would actually search for help with
 
 AVOID:
 - Generic words
 - Personal pronouns and common articles  
-- Overly broad category terms
+- Broad category terms
 - Repetitive variations of the same concept
 
 OUTPUT:
-- Maximum 100 candidates
+- Maximum 75 candidates
 - JSON array format only: ["term1", "term2", ...]
 - NO DUPLICATES - each term should be unique
 
