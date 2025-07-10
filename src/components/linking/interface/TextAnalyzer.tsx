@@ -65,6 +65,7 @@ export function TextAnalyzer() {
   const [error, setError] = useState<string | null>(null);
   const [latestLinkText, setLatestLinkText] = useState<string | null>(null);
   const [selectedOccurrenceIndex, setSelectedOccurrenceIndex] = useState<number>(0);
+  const [isManualSelection, setIsManualSelection] = useState<boolean>(false);
 
   // Clear error after delay
   useEffect(() => {
@@ -101,6 +102,34 @@ export function TextAnalyzer() {
     setError(null);
   };
 
+  // Helper function to check if text contains existing anchors
+  const hasOverlappingAnchor = (startOffset: number, endOffset: number, targetText: string): boolean => {
+    const textBeforeSelection = text.substring(0, startOffset);
+    const textAfterSelection = text.substring(endOffset);
+    const fullText = textBeforeSelection + targetText + textAfterSelection;
+    
+    // Check if the selected range overlaps with any existing markdown links
+    const linkRegex = /\[([^\]]+)\]\([^)]+\)/g;
+    let match;
+    
+    while ((match = linkRegex.exec(fullText)) !== null) {
+      const linkStart = match.index;
+      const linkEnd = linkStart + match[0].length;
+      
+      // Check if selection overlaps with this link
+      if (!(endOffset <= linkStart || startOffset >= linkEnd)) {
+        return true;
+      }
+    }
+    
+    return false;
+  };
+
+  // Extract plain text from markdown (removes link formatting)
+  const extractPlainText = (markdownText: string): string => {
+    return markdownText.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  };
+
   // 🎯 POSITION-AWARE LINK VALIDATION
   const validateLink = (suggestion: LinkSuggestion) => {
     if (!selectedTerm) return;
@@ -109,9 +138,10 @@ export function TextAnalyzer() {
     
     const newMarkdownLink = `[${selectedTerm}](${suggestion.url})`;
     
-    // Find all occurrences of the selected term
+    // Work with plain text version for finding occurrences
+    const plainText = extractPlainText(text);
     const termRegex = new RegExp(selectedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
-    const matches = Array.from(text.matchAll(termRegex));
+    const matches = Array.from(plainText.matchAll(termRegex));
     
     if (matches.length === 0) {
       console.error(`❌ Term "${selectedTerm}" not found in text`);
@@ -125,22 +155,57 @@ export function TextAnalyzer() {
       return;
     }
     
-    // Get the specific occurrence that was selected
+    // Find the position in the original markdown text
     const targetMatch = matches[selectedOccurrenceIndex];
-    const matchIndex = targetMatch.index;
+    const plainTextPosition = targetMatch.index;
     
-    if (matchIndex === undefined) {
+    if (plainTextPosition === undefined) {
       console.error(`❌ Could not determine match position`);
       setError(`Unable to determine position for "${selectedTerm}".`);
       return;
     }
     
-    // Replace the specific occurrence
-    const beforeText = text.substring(0, matchIndex);
-    const afterText = text.substring(matchIndex + selectedTerm.length);
+    // Convert plain text position to markdown position and find both start and end
+    let markdownStartPosition = 0;
+    let markdownEndPosition = 0;
+    let plainPosition = 0;
+    
+    for (let i = 0; i < text.length; i++) {
+      // Mark start position when we reach the beginning of our target
+      if (plainPosition === plainTextPosition) {
+        markdownStartPosition = i;
+      }
+      
+      // Mark end position when we reach the end of our target
+      if (plainPosition === plainTextPosition + selectedTerm.length) {
+        markdownEndPosition = i;
+        break;
+      }
+      
+      // Check if we're at the start of a markdown link
+      if (text.substring(i).match(/^\[([^\]]+)\]\([^)]+\)/)) {
+        const linkMatch = text.substring(i).match(/^\[([^\]]+)\]\([^)]+\)/);
+        if (linkMatch) {
+          const linkText = linkMatch[1];
+          i += linkMatch[0].length - 1; // Skip the entire link syntax
+          plainPosition += linkText.length; // Only count the visible text
+        }
+      } else {
+        plainPosition++;
+      }
+    }
+    
+    // If we didn't find end position, it means selection goes to end of text
+    if (markdownEndPosition === 0) {
+      markdownEndPosition = text.length;
+    }
+    
+    // Replace the specific occurrence in the markdown text
+    const beforeText = text.substring(0, markdownStartPosition);
+    const afterText = text.substring(markdownEndPosition);
     const newText = beforeText + newMarkdownLink + afterText;
     
-    console.log(`🎉 SUCCESS! Replaced occurrence #${selectedOccurrenceIndex + 1} at position ${matchIndex}`);
+    console.log(`🎉 SUCCESS! Replaced occurrence #${selectedOccurrenceIndex + 1} at position ${markdownStartPosition}`);
     setText(newText);
     
     // Update state
@@ -162,13 +227,18 @@ export function TextAnalyzer() {
     );
 
     setLatestLinkText(selectedTerm);
+    setIsManualSelection(false); // Reset after successful validation
 
-    if (editorRef.current) {
-      editorRef.current.scrollIntoView({ 
-        behavior: 'smooth',
-        block: 'start'
-      });
-    }
+    // ⚡ FIXED: Proper timing for scroll after DOM update
+    // Wait for setText to complete and DOM to update
+    setTimeout(() => {
+      if (editorRef.current) {
+        editorRef.current.scrollIntoView({ 
+          behavior: 'smooth',
+          block: 'start'
+        });
+      }
+    }, 100); // Increased delay to ensure DOM is fully updated
   };
 
   // Copy to markdown (current format)
@@ -201,6 +271,7 @@ export function TextAnalyzer() {
     setSuggestions([]);
     setSelectedTerm(null);
     setSelectedOccurrenceIndex(0);
+    setIsManualSelection(false); // Reset manual selection flag
     
     try {
       const response = await fetch('/api/extract-anchors', {
@@ -294,13 +365,28 @@ export function TextAnalyzer() {
     
     setIsLoading(true);
     
-    // Calculate which occurrence of the term was selected
+    // 🔧 FIXED: Handle overlapping keywords
     const termText = selectedText.text;
-    const beforeSelection = text.substring(0, selectedText.startOffset);
-    const occurrencesBefore = (beforeSelection.match(new RegExp(termText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
-    setSelectedOccurrenceIndex(occurrencesBefore);
     
-    console.log(`🎯 User selected occurrence #${occurrencesBefore + 1} of "${termText}"`);
+    // Check if selection overlaps with existing anchors
+    if (hasOverlappingAnchor(selectedText.startOffset, selectedText.endOffset, termText)) {
+      console.log(`🔄 Overlapping selection detected for "${termText}"`);
+      // Work with plain text for occurrence calculation
+      const plainText = extractPlainText(text);
+      const plainStartOffset = selectedText.startOffset; // This should be adjusted based on markdown parsing
+      const beforeSelection = plainText.substring(0, plainStartOffset);
+      const occurrencesBefore = (beforeSelection.match(new RegExp(termText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+      setSelectedOccurrenceIndex(occurrencesBefore);
+    } else {
+      // Normal case: calculate occurrence in the current text
+      const beforeSelection = text.substring(0, selectedText.startOffset);
+      const occurrencesBefore = (beforeSelection.match(new RegExp(termText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+      setSelectedOccurrenceIndex(occurrencesBefore);
+    }
+    
+    setIsManualSelection(true); // Mark as manual selection
+    
+    console.log(`🎯 User selected occurrence #${selectedOccurrenceIndex + 1} of "${termText}"`);
     
     try {
       const suggestions = await getSuggestionsForCandidate(selectedText.text);
@@ -327,21 +413,17 @@ export function TextAnalyzer() {
       }
       
       if (suggestions.length > 0) {
-        // Clear any previous errors on success
         setError(null);
-        // Scroll to suggestions after a small delay to ensure rendering
         setTimeout(() => {
           suggestionsRef.current?.scrollIntoView({ 
             behavior: 'smooth',
             block: 'start'
           });
-          // Clear selection only after scrolling starts
           setTimeout(() => {
             setSelectedText(null);
           }, 100);
         }, 100);
       } else {
-        // Set error state for no suggestions (but don't show notification)
         throw new Error('no-suggestions');
       }
       
@@ -352,12 +434,20 @@ export function TextAnalyzer() {
     }
   };
 
-  // Use stored suggestions instead of re-fetching
+  // 🔧 FIXED: Use stored suggestions instead of re-fetching
   const handleTermSelect = (term: AnalyzedTerm) => {
     startTransition(() => {
       setSelectedTerm(term.text);
       setSuggestions(term.suggestions);
-      setSelectedOccurrenceIndex(0); // Default to first occurrence for analyzed terms
+      
+      // Only reset occurrence index if:
+      // 1. It's a different term, OR
+      // 2. The current occurrence index wasn't set by manual selection
+      if (selectedTerm !== term.text || !isManualSelection) {
+        setSelectedOccurrenceIndex(0);
+        setIsManualSelection(false);
+      }
+      // If same term AND manual selection, preserve the selectedOccurrenceIndex
     });
   };
 
@@ -371,6 +461,7 @@ export function TextAnalyzer() {
     setValidatedAnchors([]);
     setError(null);
     setSelectedOccurrenceIndex(0);
+    setIsManualSelection(false); // Reset manual selection flag
   };
 
   const wordCount = text.trim().split(/\s+/).filter(word => word.length > 0).length;
