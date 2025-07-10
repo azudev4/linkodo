@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { decodeHtmlEntities } from '@/lib/utils/html-entities';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -48,10 +49,10 @@ export async function GET(request: NextRequest) {
 function extractMetaContent(html: string, property: string): string | null {
   const regex = new RegExp(`<meta[^>]*(?:property|name)=["']${property}["'][^>]*content=["']([^"']*)["']`, 'i');
   const match = html.match(regex);
-  return match ? match[1] : null;
+  return match ? decodeHtmlEntities(match[1]) : null;
 }
 
 function extractTitle(html: string): string | null {
   const match = html.match(/<title[^>]*>([^<]*)<\/title>/i);
-  return match ? match[1].trim() : null;
+  return match ? decodeHtmlEntities(match[1].trim()) : null;
 }

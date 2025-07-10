@@ -100,7 +100,7 @@ export function TextAnalyzer() {
     setError(null);
   };
 
-  // 🎯 FINAL CLEAN VERSION - Handles Unicode apostrophes, French articles, and invisible characters
+  // 🎯 SIMPLE ALTERNATIVE APPROACH - Remove overlapping links first
   const validateLink = (suggestion: LinkSuggestion) => {
     if (!selectedTerm) return;
     
@@ -122,25 +122,40 @@ export function TextAnalyzer() {
         .trim();
     };
     
-    const normalizedText = normalizeText(text);
     const normalizedTerm = normalizeText(selectedTerm);
     
-    let updatedText;
+    let workingText = text;
     let replacementMade = false;
     
-    // 2. CHECK EXISTING LINKS FIRST
-    const existingLinkRegex = new RegExp(`\\[${selectedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]\\([^)]+\\)`, 'g');
-    const hasExistingLink = existingLinkRegex.test(text);
+    // 2. DETECT AND HANDLE OVERLAPPING LINKS
+    const existingLinks = text.match(/\[([^\]]+)\]\(([^)]+)\)/g) || [];
+    const overlappingLinks = existingLinks.filter(link => {
+      const linkText = link.match(/\[([^\]]+)\]/)?.[1];
+      if (!linkText) return false;
+      
+      const normalizedLinkText = normalizeText(linkText);
+      // Check if the selected term contains the existing link text
+      return normalizedTerm.includes(normalizedLinkText);
+    });
     
-    if (hasExistingLink) {
-      // Replace existing link
-      updatedText = text.replace(existingLinkRegex, newMarkdownLink);
-      replacementMade = true;
-      console.log(`✅ Replaced existing link`);
+    // If there are overlapping links, remove them first
+    if (overlappingLinks.length > 0) {
+      console.log(`🔗 Found ${overlappingLinks.length} overlapping links, removing them first`);
+      
+      // Remove overlapping links by replacing them with just their text
+      overlappingLinks.forEach(link => {
+        const linkText = link.match(/\[([^\]]+)\]/)?.[1];
+        if (linkText) {
+          workingText = workingText.replace(link, linkText);
+          console.log(`🗑️ Removed overlapping link: ${link} -> ${linkText}`);
+        }
+      });
     }
     
-    // 3. CREATE NEW LINK - Direct test then with articles
-    else if (normalizedText.includes(normalizedTerm)) {
+    // 3. NOW PROCEED WITH NORMAL REPLACEMENT LOGIC
+    const normalizedWorkingText = normalizeText(workingText);
+    
+    if (normalizedWorkingText.includes(normalizedTerm)) {
       
       // Create flexible pattern to handle variable apostrophes and spaces
       const createFlexiblePattern = (term: string, withArticle = '') => {
@@ -150,17 +165,18 @@ export function TextAnalyzer() {
         return withArticle ? `${withArticle}\\s+${withFlexibleApostrophes}` : withFlexibleApostrophes;
       };
       
-      // APPROACH 1: Direct term
+      // APPROACH 1: Direct term replacement
       const directPattern = createFlexiblePattern(selectedTerm);
       const directRegex = new RegExp(directPattern, 'g');
       
-      updatedText = text.replace(directRegex, newMarkdownLink);
-      if (updatedText !== text) {
+      const directReplacement = workingText.replace(directRegex, newMarkdownLink);
+      if (directReplacement !== workingText) {
+        workingText = directReplacement;
         replacementMade = true;
         console.log(`✅ Direct replacement successful`);
       }
       
-      // APPROACH 2: With French articles
+      // APPROACH 2: Try with French articles if direct didn't work
       if (!replacementMade) {
         const articles = ['un', 'une', 'le', 'la', 'des', 'du', 'de'];
         
@@ -170,9 +186,10 @@ export function TextAnalyzer() {
           
           // Replace while keeping the article
           const replacement = `${article} ${newMarkdownLink}`;
-          updatedText = text.replace(articleRegex, replacement);
+          const articleReplacement = workingText.replace(articleRegex, replacement);
           
-          if (updatedText !== text) {
+          if (articleReplacement !== workingText) {
+            workingText = articleReplacement;
             replacementMade = true;
             console.log(`✅ Replacement with article "${article}" successful`);
             break;
@@ -182,34 +199,20 @@ export function TextAnalyzer() {
     }
     
     // 4. FINAL VERIFICATION
-    if (!replacementMade || !updatedText || updatedText === text) {
+    if (!replacementMade || workingText === text) {
       console.error(`❌ Validation failed for "${selectedTerm}"`);
-      setError(`Unable to create link for "${selectedTerm}".`);
+      
+      if (overlappingLinks.length > 0) {
+        setError(`Removed ${overlappingLinks.length} overlapping link(s) but couldn't create new link for "${selectedTerm}".`);
+      } else {
+        setError(`Unable to create link for "${selectedTerm}".`);
+      }
       return;
     }
     
-    // 5. PROTECTION AGAINST MULTIPLE LINKS
-    // Count term occurrences to ensure we only replace one
-    const termOccurrences = (text.match(new RegExp(selectedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
-    const linkOccurrences = (updatedText.match(/\[.*?\]\(.*?\)/g) || []).length - (text.match(/\[.*?\]\(.*?\)/g) || []).length;
-    
-    if (linkOccurrences > 1) {
-      console.warn(`⚠️ Multiple links created for "${selectedTerm}", keeping only first occurrence`);
-      // If multiple links created, keep only the first one
-      const firstLinkPattern = new RegExp(`\\[${selectedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]\\([^)]+\\)`);
-      const firstMatch = updatedText.match(firstLinkPattern);
-      if (firstMatch) {
-        const beforeFirst = updatedText.substring(0, updatedText.indexOf(firstMatch[0]));
-        const afterFirst = updatedText.substring(updatedText.indexOf(firstMatch[0]) + firstMatch[0].length);
-        // Replace other link occurrences with simple term
-        const cleanedAfter = afterFirst.replace(new RegExp(`\\[${selectedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]\\([^)]+\\)`, 'g'), selectedTerm);
-        updatedText = beforeFirst + firstMatch[0] + cleanedAfter;
-      }
-    }
-    
-    // 6. STATE UPDATES
+    // 5. STATE UPDATES
     console.log(`🎉 SUCCESS! Link created for "${selectedTerm}"`);
-    setText(updatedText);
+    setText(workingText);
     
     setValidatedAnchors(prev => {
       const filtered = prev.filter(anchor => anchor.anchorText !== selectedTerm);
@@ -263,6 +266,10 @@ export function TextAnalyzer() {
     
     setIsExtracting(true);
     clearMessages();
+    
+    // Clear existing suggestions and selection when AI analysis starts
+    setSuggestions([]);
+    setSelectedTerm(null);
     
     try {
       const response = await fetch('/api/extract-anchors', {
@@ -333,14 +340,6 @@ export function TextAnalyzer() {
     }
     
     setAnalyzedTerms(newTerms);
-    
-    // Auto-select the first term with results (prefer non-validated)
-    const firstWithResults = newTerms.find(term => term.hasResults && !term.isValidated) || 
-                            newTerms.find(term => term.hasResults);
-    if (firstWithResults) {
-      setSelectedTerm(firstWithResults.text);
-      setSuggestions(firstWithResults.suggestions);
-    }
   };
 
   // Get suggestions for a single candidate
