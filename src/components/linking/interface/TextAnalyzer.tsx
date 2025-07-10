@@ -64,6 +64,7 @@ export function TextAnalyzer() {
   const [validatedAnchors, setValidatedAnchors] = useState<ValidatedAnchor[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [latestLinkText, setLatestLinkText] = useState<string | null>(null);
+  const [selectedOccurrenceIndex, setSelectedOccurrenceIndex] = useState<number>(0);
 
   // Clear error after delay
   useEffect(() => {
@@ -100,136 +101,49 @@ export function TextAnalyzer() {
     setError(null);
   };
 
-  // 🎯 SIMPLE ALTERNATIVE APPROACH - Remove overlapping links first
+  // 🎯 POSITION-AWARE LINK VALIDATION
   const validateLink = (suggestion: LinkSuggestion) => {
     if (!selectedTerm) return;
     
-    console.log(`🔗 Validating: "${selectedTerm}"`);
+    console.log(`🔗 Validating: "${selectedTerm}" (occurrence #${selectedOccurrenceIndex + 1})`);
     
     const newMarkdownLink = `[${selectedTerm}](${suggestion.url})`;
     
-    // 1. CHARACTER NORMALIZATION
-    const normalizeText = (str: string) => {
-      return str
-        .replace(/\r\n/g, ' ')          // Windows line endings
-        .replace(/\r/g, ' ')            // Mac line endings  
-        .replace(/\n/g, ' ')            // Unix line endings
-        .replace(/\t/g, ' ')            // Tabs
-        .replace(/'/g, "'")             // Unicode apostrophe → ASCII
-        .replace(/'/g, "'")             // Other apostrophe variations
-        .replace(/`/g, "'")             // Grave accent
-        .replace(/\s+/g, ' ')           // Multiple spaces → single space
-        .trim();
-    };
+    // Find all occurrences of the selected term
+    const termRegex = new RegExp(selectedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+    const matches = Array.from(text.matchAll(termRegex));
     
-    const normalizedTerm = normalizeText(selectedTerm);
-    
-    let workingText = text;
-    let replacementMade = false;
-    
-    // 2. DETECT AND HANDLE OVERLAPPING LINKS
-    const existingLinks = text.match(/\[([^\]]+)\]\(([^)]+)\)/g) || [];
-    const overlappingLinks = existingLinks.filter(link => {
-      const linkText = link.match(/\[([^\]]+)\]/)?.[1];
-      if (!linkText) return false;
-      
-      const normalizedLinkText = normalizeText(linkText);
-      // Check if the selected term contains the existing link text
-      return normalizedTerm.includes(normalizedLinkText);
-    });
-    
-    // If there are overlapping links, remove them first
-    if (overlappingLinks.length > 0) {
-      console.log(`🔗 Found ${overlappingLinks.length} overlapping links, removing them first`);
-      
-      // Remove overlapping links by replacing them with just their text
-      overlappingLinks.forEach(link => {
-        const linkText = link.match(/\[([^\]]+)\]/)?.[1];
-        if (linkText) {
-          workingText = workingText.replace(link, linkText);
-          console.log(`🗑️ Removed overlapping link: ${link} -> ${linkText}`);
-        }
-      });
-
-      // Remove overlapping terms from analyzedTerms
-      setAnalyzedTerms(prev => 
-        prev.filter(term => !overlappingLinks.some(link => {
-          const linkText = link.match(/\[([^\]]+)\]/)?.[1];
-          return linkText === term.text;
-        }))
-      );
-
-      // Remove overlapping anchors from validatedAnchors  
-      setValidatedAnchors(prev =>
-        prev.filter(anchor => !overlappingLinks.some(link => {
-          const linkText = link.match(/\[([^\]]+)\]/)?.[1];
-          return linkText === anchor.anchorText;
-        }))
-      );
-    }
-    
-    // 3. NOW PROCEED WITH NORMAL REPLACEMENT LOGIC
-    const normalizedWorkingText = normalizeText(workingText);
-    
-    if (normalizedWorkingText.includes(normalizedTerm)) {
-      
-      // Create flexible pattern to handle variable apostrophes and spaces
-      const createFlexiblePattern = (term: string, withArticle = '') => {
-        const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const withFlexibleSpaces = escaped.replace(/\s+/g, '\\s+');
-        const withFlexibleApostrophes = withFlexibleSpaces.replace(/'/g, '.');
-        return withArticle ? `${withArticle}\\s+${withFlexibleApostrophes}` : withFlexibleApostrophes;
-      };
-      
-      // APPROACH 1: Direct term replacement
-      const directPattern = createFlexiblePattern(selectedTerm);
-      const directRegex = new RegExp(directPattern, 'g');
-      
-      const directReplacement = workingText.replace(directRegex, newMarkdownLink);
-      if (directReplacement !== workingText) {
-        workingText = directReplacement;
-        replacementMade = true;
-        console.log(`✅ Direct replacement successful`);
-      }
-      
-      // APPROACH 2: Try with French articles if direct didn't work
-      if (!replacementMade) {
-        const articles = ['un', 'une', 'le', 'la', 'des', 'du', 'de'];
-        
-        for (const article of articles) {
-          const articlePattern = createFlexiblePattern(selectedTerm, article);
-          const articleRegex = new RegExp(articlePattern, 'g');
-          
-          // Replace while keeping the article
-          const replacement = `${article} ${newMarkdownLink}`;
-          const articleReplacement = workingText.replace(articleRegex, replacement);
-          
-          if (articleReplacement !== workingText) {
-            workingText = articleReplacement;
-            replacementMade = true;
-            console.log(`✅ Replacement with article "${article}" successful`);
-            break;
-          }
-        }
-      }
-    }
-    
-    // 4. FINAL VERIFICATION
-    if (!replacementMade || workingText === text) {
-      console.error(`❌ Validation failed for "${selectedTerm}"`);
-      
-      if (overlappingLinks.length > 0) {
-        setError(`Removed ${overlappingLinks.length} overlapping link(s) but couldn't create new link for "${selectedTerm}".`);
-      } else {
-        setError(`Unable to create link for "${selectedTerm}".`);
-      }
+    if (matches.length === 0) {
+      console.error(`❌ Term "${selectedTerm}" not found in text`);
+      setError(`Unable to find "${selectedTerm}" in text.`);
       return;
     }
     
-    // 5. STATE UPDATES
-    console.log(`🎉 SUCCESS! Link created for "${selectedTerm}"`);
-    setText(workingText);
+    if (selectedOccurrenceIndex >= matches.length) {
+      console.error(`❌ Occurrence index ${selectedOccurrenceIndex} out of bounds (found ${matches.length} occurrences)`);
+      setError(`Selected occurrence no longer exists.`);
+      return;
+    }
     
+    // Get the specific occurrence that was selected
+    const targetMatch = matches[selectedOccurrenceIndex];
+    const matchIndex = targetMatch.index;
+    
+    if (matchIndex === undefined) {
+      console.error(`❌ Could not determine match position`);
+      setError(`Unable to determine position for "${selectedTerm}".`);
+      return;
+    }
+    
+    // Replace the specific occurrence
+    const beforeText = text.substring(0, matchIndex);
+    const afterText = text.substring(matchIndex + selectedTerm.length);
+    const newText = beforeText + newMarkdownLink + afterText;
+    
+    console.log(`🎉 SUCCESS! Replaced occurrence #${selectedOccurrenceIndex + 1} at position ${matchIndex}`);
+    setText(newText);
+    
+    // Update state
     setValidatedAnchors(prev => {
       const filtered = prev.filter(anchor => anchor.anchorText !== selectedTerm);
       return [...filtered, {
@@ -286,6 +200,7 @@ export function TextAnalyzer() {
     // Clear existing suggestions and selection when AI analysis starts
     setSuggestions([]);
     setSelectedTerm(null);
+    setSelectedOccurrenceIndex(0);
     
     try {
       const response = await fetch('/api/extract-anchors', {
@@ -379,6 +294,14 @@ export function TextAnalyzer() {
     
     setIsLoading(true);
     
+    // Calculate which occurrence of the term was selected
+    const termText = selectedText.text;
+    const beforeSelection = text.substring(0, selectedText.startOffset);
+    const occurrencesBefore = (beforeSelection.match(new RegExp(termText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+    setSelectedOccurrenceIndex(occurrencesBefore);
+    
+    console.log(`🎯 User selected occurrence #${occurrencesBefore + 1} of "${termText}"`);
+    
     try {
       const suggestions = await getSuggestionsForCandidate(selectedText.text);
       
@@ -419,7 +342,7 @@ export function TextAnalyzer() {
         }, 100);
       } else {
         // Set error state for no suggestions (but don't show notification)
-        setError('no-suggestions');
+        throw new Error('no-suggestions');
       }
       
     } catch (err) {
@@ -434,6 +357,7 @@ export function TextAnalyzer() {
     startTransition(() => {
       setSelectedTerm(term.text);
       setSuggestions(term.suggestions);
+      setSelectedOccurrenceIndex(0); // Default to first occurrence for analyzed terms
     });
   };
 
@@ -446,6 +370,7 @@ export function TextAnalyzer() {
     setSelectedTerm(null);
     setValidatedAnchors([]);
     setError(null);
+    setSelectedOccurrenceIndex(0);
   };
 
   const wordCount = text.trim().split(/\s+/).filter(word => word.length > 0).length;
