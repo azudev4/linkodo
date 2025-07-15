@@ -78,7 +78,7 @@ export async function getProjectName(projectId: string): Promise<string> {
     const projects = await client.getProjects();
     const project = projects.find(p => p.id === projectId);
     return project?.name || `Project ${projectId}`;
-  } catch (error) {
+  } catch {
     console.warn(`⚠️  Could not fetch project name, using fallback`);
     return `Project ${projectId}`;
   }

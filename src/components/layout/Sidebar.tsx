@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { Search, Database, X, Menu, ChevronLeft } from 'lucide-react';
+import { Search, Database, X, Menu } from 'lucide-react';
 
 const navigation = [
   {
@@ -73,7 +73,7 @@ export function Sidebar({ className }: SidebarProps) {
               <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm">
                 <Search className="w-4 h-4 text-white" />
               </div>
-              <h1 className="text-xl font-semibold text-gray-900">LinkSuggest</h1>
+              <h1 className="text-xl font-semibold text-gray-900">Cambium Linking</h1>
             </div>
             
             {/* Close button for mobile */}
@@ -141,11 +141,11 @@ export function Sidebar({ className }: SidebarProps) {
         <div className="p-4 border-t border-gray-100">
           <div className="text-xs text-gray-500 space-y-1">
             <div className="flex items-center justify-between">
-              <span className="font-medium">LinkSuggest</span>
+              <span className="font-medium">Cambium Linking</span>
               <span className="text-gray-400">v1.0.0</span>
             </div>
             <div className="text-gray-400">
-              AI-powered link suggestions
+              Internal linking for Cambium Media
             </div>
           </div>
         </div>

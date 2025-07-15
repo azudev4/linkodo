@@ -38,12 +38,12 @@ export async function POST(request: NextRequest) {
       }
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ Error getting suggestions:', error);
     return NextResponse.json(
       { 
         error: 'Failed to get suggestions',
-        details: error.message 
+        details: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     );

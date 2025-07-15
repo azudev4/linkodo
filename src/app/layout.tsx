@@ -6,8 +6,8 @@ import { AppShell } from "@/components/layout/AppShell";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "LinkSuggest - Internal Link Suggestions",
-  description: "AI-powered internal link suggestions for SEO content optimization",
+  title: "Cambium Linking - Internal Link Tool",
+  description: "Cambium Media's internal linking tool powered by OnCrawl data for SEO optimization",
 };
 
 export default function RootLayout({

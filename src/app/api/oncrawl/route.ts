@@ -149,20 +149,20 @@ export async function GET(request: NextRequest) {
             'Cache-Control': 'no-cache'
           }
         });
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Download error:', error);
         return NextResponse.json({ 
-          error: error.message || 'Failed to download data from latest accessible crawl' 
+          error: error instanceof Error ? error.message : 'Failed to download data from latest accessible crawl' 
         }, { status: 500 });
       }
     }
     
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('OnCrawl API error:', error);
     return NextResponse.json({ 
-      error: error.message || 'Failed to process request' 
+      error: error instanceof Error ? error.message : 'Failed to process request' 
     }, { status: 500 });
   }
 }
@@ -216,10 +216,10 @@ export async function POST(request: NextRequest) {
       }
     });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('OnCrawl sync error:', error);
     return NextResponse.json({ 
-      error: error.message || 'Failed to sync data' 
+      error: error instanceof Error ? error.message : 'Failed to sync data' 
     }, { status: 500 });
   }
 }

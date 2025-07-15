@@ -59,24 +59,22 @@ export function processOnCrawlPage(page: OnCrawlPage): ProcessedOnCrawlPage {
 /**
  * Check if a page has actually changed compared to existing data
  */
-export function hasPageChanged(existing: any, newPage: ProcessedOnCrawlPage): boolean {
-  const normalizeString = (value: any): string | null => {
+export function hasPageChanged(existing: OnCrawlPage, newPage: ProcessedOnCrawlPage): boolean {
+  const normalizeString = (value: unknown): string | null => {
     if (value === null || value === undefined || value === "") return null;
     return String(value).trim() || null;
   };
 
-  const normalizeNumber = (value: any): number | null => {
+  const normalizeNumber = (value: unknown): number | null => {
     if (value === null || value === undefined || value === "" || value === "null") return null;
-    const num = parseFloat(value);
+    const num = parseFloat(String(value));
     if (isNaN(num)) return null;
     return Math.round(num * 1000000) / 1000000;
   };
 
   const titleChanged = normalizeString(existing.title) !== normalizeString(newPage.title);
   const metaDescChanged = normalizeString(existing.meta_description) !== normalizeString(newPage.metaDescription);
-  const h1Changed = normalizeString(existing.h1) !== normalizeString(newPage.h1);
-  const categoryChanged = normalizeString(existing.category) !== normalizeString(newPage.category);
-  
+  const h1Changed = normalizeString(existing.h1) !== normalizeString(newPage.h1);  
   const wordCountChanged = normalizeNumber(existing.word_count) !== normalizeNumber(newPage.wordCount);
   const depthChanged = normalizeNumber(existing.depth) !== normalizeNumber(newPage.depth);
   const inrankChanged = normalizeNumber(existing.inrank_decimal) !== normalizeNumber(newPage.inrankDecimal);
@@ -84,5 +82,5 @@ export function hasPageChanged(existing: any, newPage: ProcessedOnCrawlPage): bo
   const inlinkChanged = normalizeNumber(existing.nb_inlinks) !== normalizeNumber(newPage.nbInlinks);
 
   return titleChanged || metaDescChanged || h1Changed || wordCountChanged || 
-         depthChanged || inrankChanged || outlinkChanged || inlinkChanged || categoryChanged;
+         depthChanged || inrankChanged || outlinkChanged || inlinkChanged;
 }

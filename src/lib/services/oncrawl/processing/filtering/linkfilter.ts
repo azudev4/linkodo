@@ -929,7 +929,7 @@ export function getExclusionReason(
     if (numericSegment) return `Long numeric ID: ${numericSegment}`;
     
     return null;
-  } catch (error) {
+  } catch {
     return 'Invalid URL format';
   }
 } 

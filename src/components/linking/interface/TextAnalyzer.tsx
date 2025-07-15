@@ -2,7 +2,6 @@
 'use client';
 
 import { useState, useEffect, startTransition, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,7 +16,6 @@ import {
 import { RichTextEditor } from './RichTextEditor';
 import { AnalyzedTerms } from './AnalyzedTerms';
 import { SuggestionsList } from './SuggestionsList';
-import { useIsMobile } from '@/hooks/use-mobile';
 
 interface LinkSuggestion {
   id: string;
@@ -49,7 +47,6 @@ interface ValidatedAnchor {
 }
 
 export function TextAnalyzer() {
-  const isMobile = useIsMobile();
   const [text, setText] = useState(`Lorsque vous planifiez votre potager pour cette saison...`);
   
   const loadingRef = useRef<HTMLDivElement>(null);
@@ -287,7 +284,7 @@ export function TextAnalyzer() {
       } else {
         setError(data.error || 'Failed to extract anchors');
       }
-    } catch (err) {
+    } catch {
       setError('Error extracting anchors');
     } finally {
       setIsExtracting(false);
@@ -296,18 +293,19 @@ export function TextAnalyzer() {
 
   // Process all candidates for suggestions
   const processAllCandidates = async (candidates: string[]) => {
-    const newTerms: AnalyzedTerm[] = [];
     const seenSuggestions = new Set<string>();
     
-    for (const candidate of candidates) {
+    // Filter out duplicates with existing terms
+    const existingTermTexts = new Set(analyzedTerms.map(term => term.text));
+    const uniqueCandidates = candidates.filter(candidate => !existingTermTexts.has(candidate));
+    
+    for (const candidate of uniqueCandidates) {
       try {
         const allSuggestions = await getSuggestionsForCandidate(candidate);
         
         // Filter out suggestions we've already seen
         const uniqueSuggestions = allSuggestions.filter(suggestion => {
-          if (seenSuggestions.has(suggestion.id)) {
-            return false;
-          }
+          if (seenSuggestions.has(suggestion.id)) return false;
           seenSuggestions.add(suggestion.id);
           return true;
         });
@@ -315,33 +313,31 @@ export function TextAnalyzer() {
         // Check if this term was already validated
         const isValidated = validatedAnchors.some(anchor => anchor.anchorText === candidate);
         
-        newTerms.push({
+        // Add new term while preserving existing ones
+        setAnalyzedTerms(prev => [...prev, {
           text: candidate,
           hasResults: uniqueSuggestions.length > 0,
           suggestionCount: uniqueSuggestions.length,
           suggestions: uniqueSuggestions,
           isValidated
-        });
-        
-        // Update state incrementally
-        setAnalyzedTerms([...newTerms]);
+        }]);
         
         // Small delay to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 100));
         
       } catch (err) {
         console.error(`Error processing candidate "${candidate}":`, err);
-        newTerms.push({
+        setAnalyzedTerms(prev => [...prev, {
           text: candidate,
           hasResults: false,
           suggestionCount: 0,
           suggestions: [],
           isValidated: false
-        });
+        }]);
       }
     }
     
-    setAnalyzedTerms(newTerms);
+    console.log(`✅ Successfully processed ${uniqueCandidates.length} new candidates`);
   };
 
   // Get suggestions for a single candidate
@@ -427,7 +423,7 @@ export function TextAnalyzer() {
         throw new Error('no-suggestions');
       }
       
-    } catch (err) {
+    } catch {
       setError('Error finding suggestions');
     } finally {
       setIsLoading(false);
@@ -478,7 +474,7 @@ export function TextAnalyzer() {
                 <FileText className="w-5 h-5 text-blue-600" />
               </div>
               <span className="text-xl font-semibold text-blue-600">
-                Smart Link Finder
+                Cambium Linking AI
               </span>
             </div>
             <div className="flex items-center gap-3">
@@ -620,7 +616,7 @@ export function TextAnalyzer() {
                 <div className="flex items-center justify-center h-[300px] text-gray-500">
                   <div className="text-center">
                     <div className="text-sm">No suggestions found</div>
-                    <div className="text-xs mt-1">for "{selectedTerm}"</div>
+                    <div className="text-xs mt-1">for &quot;{selectedTerm}&quot;</div>
                   </div>
                 </div>
               </CardContent>
@@ -640,7 +636,7 @@ export function TextAnalyzer() {
               <div>
                 <div className="font-medium text-gray-900 mb-2">Ready to find internal links</div>
                 <div className="text-sm text-gray-500 max-w-md mx-auto leading-relaxed">
-                  Click "Analyze with AI" to automatically find all anchor opportunities, or manually select text for individual suggestions
+                  Click &quot;Analyze with AI&quot; to automatically find all anchor opportunities, or manually select text for individual suggestions
                 </div>
               </div>
             </div>

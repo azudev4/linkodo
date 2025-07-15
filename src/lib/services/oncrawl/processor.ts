@@ -1,6 +1,6 @@
 // src/lib/services/oncrawl/processor.ts - REFACTORED CLEAN VERSION
 import { OnCrawlClient } from './client';
-import { SyncResult, SyncMode, OnCrawlPage, ProcessedOnCrawlPage, FilterStats } from './types';
+import { SyncResult, SyncMode, FilterStats } from './types';
 import { shouldExcludeUrl } from '@/lib/services/oncrawl/processing/filtering/linkfilter';
 import { optimizedSmartSync, optimizedUrlOnlySync } from './processing/database-sync';
 import { createSyncHistoryRecord, updateSyncHistoryRecord, getProjectName } from './processing/sync-history';

@@ -1,7 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
-import { BarChart3, Loader2, RefreshCw } from 'lucide-react';
+import { BarChart3, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { StatCard } from './StatCard';
 import { StatCardSkeleton, ProgressBarSkeleton } from '@/components/ui/skeleton';
@@ -17,6 +16,7 @@ interface DatabaseStats {
 interface DatabaseStatsProps {
   stats: DatabaseStats | null;
   onRefresh: () => void;
+  isLoading?: boolean;
 }
 
 const formatDate = (dateString: string | null) => {
@@ -30,7 +30,10 @@ const formatDate = (dateString: string | null) => {
   });
 };
 
-export function DatabaseStats({ stats, onRefresh }: DatabaseStatsProps) {
+export function DatabaseStats({ stats, onRefresh, isLoading = false }: DatabaseStatsProps) {
+  const handleRefresh = async () => {
+    await onRefresh();
+  };
   return (
     <Card className="border-2 shadow-lg hover:shadow-xl transition-all duration-300">
       <CardHeader className="flex flex-row items-center justify-between">
@@ -41,22 +44,25 @@ export function DatabaseStats({ stats, onRefresh }: DatabaseStatsProps) {
             </div>
             <span className="text-xl font-semibold text-blue-600">Database Status</span>
           </CardTitle>
-          <CardDescription>Current indexing and embedding status</CardDescription>
+          <CardDescription>
+            Current indexing and embedding status
+          </CardDescription>
         </div>
         <Button
           variant="outline"
           size="sm"
-          onClick={onRefresh}
+          onClick={handleRefresh}
+          disabled={isLoading}
           className="flex items-center space-x-2"
         >
-          <RefreshCw className="w-4 h-4" />
-          <span>Refresh</span>
+          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          <span>{isLoading ? 'Refreshing...' : 'Refresh'}</span>
         </Button>
       </CardHeader>
       
       <CardContent className="min-h-[280px]">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {stats ? (
+          {stats && !isLoading ? (
             <>
               <StatCard
                 value={stats.totalPages}
@@ -88,7 +94,7 @@ export function DatabaseStats({ stats, onRefresh }: DatabaseStatsProps) {
 
         {/* Enhanced Embedding Progress Bar */}
         <div className="h-[120px] flex items-stretch">
-          {stats ? (
+          {stats && !isLoading ? (
             stats.totalPages > 0 && (
               <motion.div
                 initial={{ opacity: 0 }}

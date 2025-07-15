@@ -57,13 +57,13 @@ export async function GET() {
       timestamp: new Date().toISOString()
     });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ Embedding test failed:', error);
     
     return NextResponse.json({
       success: false,
       error: 'Embedding test failed',
-      details: error.message,
+      details: error instanceof Error ? error.message : 'Unknown error',
       timestamp: new Date().toISOString()
     }, { status: 500 });
   }

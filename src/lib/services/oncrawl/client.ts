@@ -95,10 +95,10 @@ class OnCrawlClient {
       const headers = parseCSVLine(lines[0], ';');
       const jsonObjects = lines.slice(1).map(line => {
         const values = parseCSVLine(line, ';');
-        const obj: any = {};
+        const obj: Record<string, string> = {};
         headers.forEach((header, i) => {
-          if (header !== null) {
-            obj[header] = values[i];
+          if (header !== null && values[i] !== null) {
+            obj[header] = values[i] as string;
           }
         });
         return obj;

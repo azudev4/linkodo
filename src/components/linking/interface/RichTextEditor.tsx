@@ -464,7 +464,7 @@ export function RichTextEditor({
           className="absolute top-3 right-3 flex items-center space-x-2"
         >
           <div className="px-3 py-1.5 bg-green-100 text-green-700 rounded-full text-xs font-medium shadow-md border border-green-200">
-            ✓ "{selectedText.text.substring(0, 20)}{selectedText.text.length > 20 ? '...' : ''}" selected
+            ✓ &quot;{selectedText.text.substring(0, 20)}{selectedText.text.length > 20 ? '...' : ''}&quot; selected
           </div>
           <Button
             onClick={onFindLinks}
@@ -556,7 +556,6 @@ export function RichTextEditor({
         url={hoverCardUrl}
         isVisible={showHoverCard}
         position={hoverCardPosition}
-        onHide={() => setShowHoverCard(false)}
       />
     </div>
   );

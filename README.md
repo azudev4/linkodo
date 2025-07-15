@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Cambium Linking
 
-## Getting Started
+Internal linking tool for Cambium Media powered by OnCrawl data and AI-driven suggestions.
 
-First, run the development server:
+## What it does
 
+- Analyzes content and suggests internal links from your OnCrawl data
+- Uses AI to identify anchor text opportunities 
+- Provides relevance scoring for suggested links
+- Exports content with validated links in markdown or HTML
+
+## Getting started
+
+1. Install dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Set up environment variables in `.env.local`:
+```bash
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+ONCRAWL_API_TOKEN=your_oncrawl_token
+OPENAI_API_KEY=your_openai_key
+ADMIN_USERNAME=your_admin_username
+ADMIN_PASSWORD=your_admin_password
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Run the development server:
+```bash
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. Open [http://localhost:3000](http://localhost:3000)
 
-## Learn More
+## Usage
 
-To learn more about Next.js, take a look at the following resources:
+1. **Analyze**: Paste your content and click "Analyze with AI" to find linking opportunities
+2. **Review**: Browse suggested links with relevance scores
+3. **Validate**: Select links to add to your content
+4. **Export**: Copy the final content as markdown or HTML
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Features
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- AI-powered anchor text detection
+- OnCrawl data integration for link suggestions
+- Real-time content editing with link validation
+- Batch processing of multiple anchor opportunities
+- Export options for various content management systems
 
-## Deploy on Vercel
+## Tech stack
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Next.js 15
+- React 19
+- TypeScript
+- Tailwind CSS
+- Supabase
+- OnCrawl API
+- OpenAI API

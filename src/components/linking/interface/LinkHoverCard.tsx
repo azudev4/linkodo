@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
 import { ExternalLink, Globe, Image as ImageIcon } from 'lucide-react';
+import Image from 'next/image';
 
 interface OGData {
   title?: string;
@@ -15,13 +16,11 @@ interface LinkHoverCardProps {
   url: string;
   isVisible: boolean;
   position: { x: number; y: number };
-  onHide: () => void;
 }
 
-export function LinkHoverCard({ url, isVisible, position, onHide }: LinkHoverCardProps) {
+export function LinkHoverCard({ url, isVisible, position }: LinkHoverCardProps) {
   const [ogData, setOgData] = useState<OGData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(false);
 
   useEffect(() => {
     if (isVisible && url) {
@@ -31,7 +30,6 @@ export function LinkHoverCard({ url, isVisible, position, onHide }: LinkHoverCar
 
   const fetchOGData = async (targetUrl: string) => {
     setIsLoading(true);
-    setError(false);
     
     try {
       const response = await fetch(`/api/og-data?url=${encodeURIComponent(targetUrl)}`);
@@ -40,15 +38,13 @@ export function LinkHoverCard({ url, isVisible, position, onHide }: LinkHoverCar
         const data = await response.json();
         setOgData(data);
       } else {
-        setError(true);
         setOgData({
           url: targetUrl,
           title: new URL(targetUrl).hostname,
           description: targetUrl
         });
       }
-    } catch (err) {
-      setError(true);
+    } catch {
       setOgData({
         url: targetUrl,
         title: new URL(targetUrl).hostname,
@@ -96,10 +92,11 @@ export function LinkHoverCard({ url, isVisible, position, onHide }: LinkHoverCar
                 {/* OG Image */}
                 {ogData.image && (
                   <div className="relative h-32 overflow-hidden">
-                    <img 
+                    <Image 
                       src={ogData.image} 
                       alt={ogData.title || 'Preview'}
-                      className="w-full h-full object-cover"
+                      fill
+                      className="object-cover"
                       onError={(e) => {
                         (e.target as HTMLImageElement).style.display = 'none';
                       }}

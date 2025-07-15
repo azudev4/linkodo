@@ -1,10 +1,12 @@
 // src/lib/services/embeding/embedding-matcher.ts - ENHANCED WITH DEBUG LOGS AND WEIGHTED EMBEDDINGS
-import OpenAI from 'openai';
 import { supabase } from '@/lib/db/client';
 import { generateEmbedding, embeddingFromString } from './embeddings';
+import { DatabasePage } from '@/lib/services/oncrawl/types';
 
-// Initialize OpenAI
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+interface DatabasePageWithId extends DatabasePage {
+  id: string;
+  similarity: number;
+}
 
 // Default configuration values
 const DEFAULT_SIMILARITY_THRESHOLD = 0.52;
@@ -36,12 +38,28 @@ export interface AnchorMatch {
   options: MatchOption[];
 }
 
+interface DebugInfo {
+  searchDuration?: number;
+  rawResultCount?: number;
+  filteredResultCount?: number;
+  finalResultCount?: number;
+  attempts?: number;
+  topSimilarities?: number[];
+  searchType?: 'failed' | 'success';
+  error?: string;
+  errorCode?: string;
+  duration?: number;
+  success?: boolean;
+  resultCount?: number;
+  candidate?: string;
+}
+
 export interface MatchingResult {
   matches: AnchorMatch[];
   totalCandidates: number;
   totalMatches: number;
   averageScore: number;
-  debugInfo?: any;
+  debugInfo?: Partial<DebugInfo>[];
 }
 
 // CORRECTED: Use actual database schema
@@ -84,7 +102,7 @@ async function findSimilarPagesEnhanced(
   minSimilarity: number = 0.7,
   maxResults: number = 3,
   maxRetries: number = 2
-): Promise<{ pages: PageWithEmbedding[]; debugInfo: any }> {
+): Promise<{ pages: PageWithEmbedding[]; debugInfo: DebugInfo }> {
   console.log(`🔍 Starting similarity search with threshold: ${minSimilarity}, limit: ${maxResults}`);
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -106,7 +124,7 @@ async function findSimilarPagesEnhanced(
         setTimeout(() => reject(new Error(`Search timeout after ${timeoutMs}ms (attempt ${attempt})`)), timeoutMs);
       });
 
-      const { data, error } = await Promise.race([searchPromise, timeoutPromise]) as any;
+      const { data, error } = await Promise.race([searchPromise, timeoutPromise]) as { data: DatabasePageWithId[] | null; error: { code?: string; message?: string } | null };
       const searchDuration = Date.now() - searchStartTime;
 
       if (error) {
@@ -140,14 +158,14 @@ async function findSimilarPagesEnhanced(
       console.log(`✅ Similarity search succeeded on attempt ${attempt} in ${searchDuration}ms: ${results.length} results`);
       
       // Filter and process results
-      const filteredResults = results.filter((r: any) => r.similarity >= minSimilarity);
-      const pages: PageWithEmbedding[] = filteredResults.slice(0, maxResults).map((row: any) => ({
+      const filteredResults = results.filter((r: { similarity: number }) => r.similarity >= minSimilarity);
+      const pages: PageWithEmbedding[] = filteredResults.slice(0, maxResults).map((row: DatabasePageWithId) => ({
         id: row.id,
         url: row.url,
         title: row.title,
         meta_description: row.meta_description,
         h1: row.h1,
-        embedding: row.embedding || '[]',
+        embedding: Array.isArray(row.embedding) ? JSON.stringify(row.embedding) : '[]',
         similarity: row.similarity
       }));
 
@@ -157,19 +175,20 @@ async function findSimilarPagesEnhanced(
         filteredResultCount: filteredResults.length,
         finalResultCount: pages.length,
         attempts: attempt,
-        topSimilarities: results.slice(0, 5).map((r: any) => r.similarity)
+        topSimilarities: results.slice(0, 5).map((r: { similarity: number }) => r.similarity)
       };
 
       return { pages, debugInfo };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       const searchDuration = Date.now() - searchStartTime;
       console.error(`❌ Similarity search error on attempt ${attempt}:`, error);
       
+      const err = error as { message?: string; code?: string };
       if (attempt < maxRetries && (
-        error.message?.includes('timeout') || 
-        error.message?.includes('canceling') ||
-        error.code === '57014'
+        err.message?.includes('timeout') || 
+        err.message?.includes('canceling') ||
+        err.code === '57014'
       )) {
         const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
         console.log(`🔄 Retrying in ${backoffMs}ms...`);
@@ -181,7 +200,7 @@ async function findSimilarPagesEnhanced(
         pages: [], 
         debugInfo: {
           searchType: 'failed',
-          error: error.message || String(error),
+          error: err.message || String(error),
           searchDuration,
           attempts: attempt
         }
@@ -272,7 +291,7 @@ async function findCandidateMatches(
   candidate: AnchorCandidate,
   minSimilarity: number = DEFAULT_SIMILARITY_THRESHOLD,
   maxOptions: number = 3
-): Promise<AnchorMatch & { debugInfo?: any }> {
+): Promise<AnchorMatch & { debugInfo?: DebugInfo }> {
   console.log(`\n🎯 Processing candidate: "${candidate.text}"`);
   const candidateStartTime = Date.now();
   
@@ -335,7 +354,7 @@ export async function findAnchorMatches(
   const matches: AnchorMatch[] = [];
   let totalMatches = 0;
   let totalScore = 0;
-  const allDebugInfo: any[] = [];
+  const allDebugInfo: Partial<DebugInfo>[] = [];
   
   // Process candidates with rate limiting
   for (let i = 0; i < candidates.length; i++) {
@@ -445,7 +464,7 @@ export async function checkEmbeddingCompatibility(): Promise<{
   totalPages: number;
   pagesWithEmbeddings: number;
   compatibilityIssues: string[];
-  performanceCheck?: any;
+  performanceCheck?: Partial<DebugInfo>;
 }> {
   console.log('🔍 Running enhanced embedding compatibility check for weighted embeddings...');
   
@@ -514,7 +533,7 @@ export async function checkEmbeddingCompatibility(): Promise<{
               issues.push(`Page ${page.id} has invalid embedding format`);
             }
           }
-        } catch (error) {
+        } catch {
           issues.push(`Page ${page.id} has unparseable embedding`);
         }
       }

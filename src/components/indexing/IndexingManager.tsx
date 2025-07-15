@@ -7,6 +7,7 @@ import { StatusMessages } from './interface/StatusMessages';
 import { DatabaseStats } from './interface/DatabaseStats';
 import { OnCrawlSync } from './interface/OnCrawlSync';
 import { EmbeddingsGenerator } from './interface/EmbeddingsGenerator';
+import { useStatsCache } from '@/hooks/useStatsCache';
 
 interface OnCrawlProject {
   id: string;
@@ -16,20 +17,17 @@ interface OnCrawlProject {
   last_crawl_id?: string;
 }
 
-interface DatabaseStatsType {
-  totalPages: number;
-  pagesWithEmbeddings: number;
-  pagesWithoutEmbeddings: number;
-  embeddingProgress: number;
-  lastSync: string | null;
-}
 
 export function IndexingManager() {
-  const [stats, setStats] = useState<DatabaseStatsType | null>(null);
+  const { 
+    stats, 
+    isLoading: isLoadingStats, 
+    error: statsError, 
+    refreshStats 
+  } = useStatsCache();
   const [projects, setProjects] = useState<OnCrawlProject[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>('');
   
-  const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isGeneratingEmbeddings, setIsGeneratingEmbeddings] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
@@ -41,7 +39,6 @@ export function IndexingManager() {
 
   // Load initial data
   useEffect(() => {
-    loadStats();
     loadProjects();
   }, []);
 
@@ -50,21 +47,9 @@ export function IndexingManager() {
     setSuccess(null);
   };
 
-  const loadStats = async () => {
-    try {
-      const response = await fetch('/api/stats');
-      const data = await response.json();
-      
-      if (data.success) {
-        setStats(data.stats);
-      }
-    } catch (err) {
-      console.error('Error loading stats:', err);
-    }
-  };
 
   const loadProjects = async () => {
-    setIsLoading(true);
+    setIsDownloading(true);
     try {
       const response = await fetch('/api/oncrawl?action=projects');
       const data = await response.json();
@@ -74,10 +59,10 @@ export function IndexingManager() {
       } else {
         setError('Failed to load OnCrawl projects');
       }
-    } catch (err) {
+    } catch {
       setError('Error connecting to OnCrawl');
     } finally {
-      setIsLoading(false);
+      setIsDownloading(false);
     }
   };
 
@@ -120,11 +105,11 @@ export function IndexingManager() {
           `${modeLabel} sync completed in ${duration}ms (${rate} pages/sec): ${breakdown}`
         );
         
-        await loadStats();
+        await refreshStats();
       } else {
         setError(data.error || 'Sync failed');
       }
-    } catch (err) {
+    } catch {
       setError('Error during sync');
     } finally {
       setIsSyncing(false);
@@ -183,11 +168,11 @@ export function IndexingManager() {
       if (data.success) {
         setEmbeddingProgress(100);
         setSuccess(`Generated embeddings for ${data.processed} pages!`);
-        await loadStats();
+        await refreshStats();
       } else {
         setError(data.error || 'Embedding generation failed');
       }
-    } catch (err) {
+    } catch {
       setError('Error generating embeddings');
     } finally {
       setIsGeneratingEmbeddings(false);
@@ -204,7 +189,8 @@ export function IndexingManager() {
       
       <DatabaseStats 
         stats={stats}
-        onRefresh={loadStats}
+        onRefresh={refreshStats}
+        isLoading={isLoadingStats}
       />
       
       <OnCrawlSync 

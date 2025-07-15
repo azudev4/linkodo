@@ -86,7 +86,7 @@ Example candidates: ["wall mounting", "drill bits", "soil preparation", "safety 
     let candidates: string[];
     try {
       candidates = JSON.parse(content);
-    } catch (parseError) {
+    } catch {
       console.error('Failed to parse GPT response as JSON:', content);
       throw new Error('Invalid JSON response from GPT');
     }
@@ -114,17 +114,19 @@ Example candidates: ["wall mounting", "drill bits", "soil preparation", "safety 
       inputLength: text.length
     });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Anchor extraction error:', error);
     
-    if (error.status === 429) {
+    const err = error as { status?: number; code?: string; message?: string };
+    
+    if (err.status === 429) {
       return NextResponse.json(
         { error: 'Rate limit exceeded. Please try again in a moment.' },
         { status: 429 }
       );
     }
     
-    if (error.code === 'insufficient_quota') {
+    if (err.code === 'insufficient_quota') {
       return NextResponse.json(
         { error: 'OpenAI quota exceeded. Please check your API usage.' },
         { status: 503 }
@@ -134,7 +136,7 @@ Example candidates: ["wall mounting", "drill bits", "soil preparation", "safety 
     return NextResponse.json(
       { 
         error: 'Failed to extract anchors',
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        details: process.env.NODE_ENV === 'development' ? err.message : undefined
       },
       { status: 500 }
     );

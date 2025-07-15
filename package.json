@@ -1,7 +1,10 @@
 {
-  "name": "linkrustic",
+  "name": "cambium-linking",
   "version": "0.1.0",
   "private": true,
+  "description": "Cambium Linking - Internal linking tool for Cambium Media using OnCrawl",
+  "author": "Cambium Media",
+  "keywords": ["internal linking", "seo", "oncrawl", "cambium media"],
   "scripts": {
     "dev": "next dev",
     "build": "next build",

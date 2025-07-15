@@ -27,6 +27,15 @@ export interface OnCrawlPage {
 }
 
 /**
+ * Database page type that extends OnCrawlPage with database-specific fields
+ */
+export interface DatabasePage extends OnCrawlPage {
+  embedding: number[] | null;
+  project_name: string;
+  updated_at: string;
+}
+
+/**
  * Processed page data after normalization
  */
 export interface ProcessedOnCrawlPage {

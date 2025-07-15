@@ -1,12 +1,12 @@
 // src/lib/services/oncrawl/processing/database-sync.ts - OPTIMIZED VERSION
 import { supabase } from '@/lib/db/client';
-import { ProcessedOnCrawlPage, FilterStats } from '../types';
+import { ProcessedOnCrawlPage, FilterStats, DatabasePage } from '../types';
 import { hasPageChanged } from './page-normalizer';
 
 /**
  * Efficiently fetch existing pages for change detection
  */
-export async function fetchExistingPagesOptimized(projectName: string): Promise<Map<string, any>> {
+export async function fetchExistingPagesOptimized(projectName: string): Promise<Map<string, DatabasePage>> {
   console.log(`🔍 Fetching existing pages for project "${projectName}" for change detection...`);
   const startTime = Date.now();
   
@@ -26,13 +26,13 @@ export async function fetchExistingPagesOptimized(projectName: string): Promise<
     return new Map();
   }
   
-  const allPages: any[] = [];
+  const allPages: DatabasePage[] = [];
   const batchSize = 1000; // Match Supabase limit
   
   for (let offset = 0; offset < totalPages; offset += batchSize) {
     const { data: batch, error } = await supabase
       .from('pages')
-      .select('url, title, meta_description, h1, word_count, category, depth, inrank_decimal, internal_outlinks, nb_inlinks, embedding')
+      .select('url, title, meta_description, h1, word_count, category, depth, inrank_decimal, internal_outlinks, nb_inlinks, embedding, project_name, updated_at, status_code')
       .eq('project_name', projectName)
       .range(offset, offset + batchSize - 1);
     
@@ -41,7 +41,7 @@ export async function fetchExistingPagesOptimized(projectName: string): Promise<
     }
     
     if (batch?.length) {
-      allPages.push(...batch);
+      allPages.push(...(batch as DatabasePage[]));
       console.log(`🔍 Fetched ${allPages.length}/${totalPages} pages`);
     }
   }
@@ -60,7 +60,7 @@ export async function fetchExistingPagesOptimized(projectName: string): Promise<
  */
 export function categorizePagesOptimized(
   filteredPages: ProcessedOnCrawlPage[],
-  existingPageMap: Map<string, any>
+  existingPageMap: Map<string, DatabasePage>
 ): {
   newPages: ProcessedOnCrawlPage[];
   changedPages: ProcessedOnCrawlPage[];
@@ -146,8 +146,8 @@ export async function directInsertNewPages(
         inserted += actualInserted;
         console.log(`📥 Inserted batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(pages.length / batchSize)}: ${actualInserted} pages`);
       }
-    } catch (error: any) {
-      console.error(`❌ Insert batch error:`, error.message);
+    } catch (error: unknown) {
+      console.error(`❌ Insert batch error:`, error instanceof Error ? error.message : 'Unknown error');
       failed += batch.length;
     }
   }
@@ -160,7 +160,7 @@ export async function directInsertNewPages(
  */
 export async function directUpdateChangedPages(
   pages: ProcessedOnCrawlPage[],
-  existingPageMap: Map<string, any>,
+  existingPageMap: Map<string, DatabasePage>,
   projectName: string,
   batchSize: number = 200
 ): Promise<{ updated: number; failed: number }> {
@@ -215,8 +215,8 @@ export async function directUpdateChangedPages(
       
       console.log(`🔄 Updated batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(pages.length / batchSize)}: ${batchUpdated}/${batch.length} pages`);
       
-    } catch (error: any) {
-      console.error(`❌ Update batch error:`, error.message);
+    } catch (error: unknown) {
+      console.error(`❌ Update batch error:`, error instanceof Error ? error.message : 'Unknown error');
       failed += batch.length;
     }
   }
@@ -256,8 +256,8 @@ export async function directDeleteStalePages(
         deleted += actualDeleted;
         console.log(`🗑️  Deleted batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(staleUrls.length / batchSize)}: ${actualDeleted} pages`);
       }
-    } catch (error: any) {
-      console.error(`❌ Delete batch error:`, error.message);
+    } catch (error: unknown) {
+      console.error(`❌ Delete batch error:`, error instanceof Error ? error.message : 'Unknown error');
       failed += batch.length;
     }
   }

@@ -149,7 +149,7 @@ export function OnCrawlSync({
                   <div className="space-y-2">
                     <p className="text-sm font-medium">When to use Full Sync:</p>
                     <ul className="text-sm text-gray-500 list-disc pl-4 space-y-1">
-                      <li>You've updated page titles or meta descriptions</li>
+                      <li>You&apos;ve updated page titles or meta descriptions</li>
                       <li>Content has changed significantly</li>
                       <li>You need fresh word count, depth or inrank values</li>
                     </ul>

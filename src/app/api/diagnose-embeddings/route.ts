@@ -127,12 +127,12 @@ export async function GET() {
       ].filter(Boolean)
     });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ Diagnosis failed:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to diagnose embedding issues',
-      details: error.message
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
 }
