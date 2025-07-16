@@ -97,12 +97,22 @@ export function RichTextEditor({
       const nodeLength = currentNode.textContent?.length || 0;
       if (currentOffset + nodeLength >= targetOffset) {
         const localOffset = targetOffset - currentOffset;
+        // Create range without triggering scroll
         const range = document.createRange();
         range.setStart(currentNode, localOffset);
         range.setEnd(currentNode, localOffset);
+        
+        // Store current scroll position to restore after selection
+        const currentScrollTop = window.scrollY;
+        
         const selection = window.getSelection();
         selection?.removeAllRanges();
         selection?.addRange(range);
+        
+        // Restore scroll position if browser scrolled due to selection
+        if (Math.abs(window.scrollY - currentScrollTop) > 5) {
+          window.scrollTo({ top: currentScrollTop, behavior: 'instant' });
+        }
         return;
       }
       currentOffset += nodeLength;
@@ -214,11 +224,28 @@ export function RichTextEditor({
         
         editorRef.current.innerHTML = htmlContent;
         
-        // Restore cursor position after update
+        // Check if we're adding a new anchor (indicated by animate-highlight class)
+        const hasNewAnchor = htmlContent.includes('animate-highlight');
+        
+        // Restore cursor position after update and scroll to new anchor
         if (savedTextOffset > 0) {
           setTimeout(() => {
             if (editorRef.current) {
-              setTextOffset(editorRef.current, savedTextOffset);
+              // Only restore cursor if not adding a new anchor to avoid scroll conflicts
+              if (!hasNewAnchor) {
+                setTextOffset(editorRef.current, savedTextOffset);
+              }
+              
+              // Wait a bit longer for the highlight animation to be applied
+              setTimeout(() => {
+                const newAnchor = editorRef.current?.querySelector('a[class*="animate-highlight"]');
+                if (newAnchor) {
+                  newAnchor.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center' 
+                  });
+                }
+              }, 100);
             }
           }, 0);
         }

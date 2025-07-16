@@ -226,16 +226,8 @@ export function TextAnalyzer() {
     setLatestLinkText(selectedTerm);
     setIsManualSelection(false); // Reset after successful validation
 
-    // ⚡ FIXED: Proper timing for scroll after DOM update
-    // Wait for setText to complete and DOM to update
-    setTimeout(() => {
-      if (editorRef.current) {
-        editorRef.current.scrollIntoView({ 
-          behavior: 'smooth',
-          block: 'start'
-        });
-      }
-    }, 10); // Reduced delay for faster response while still ensuring DOM update
+    // ⚡ REMOVED: Unnecessary scroll to editor that was causing double scroll
+    // The RichTextEditor will handle scrolling to the new anchor automatically
   };
 
   // Copy to markdown (current format)
