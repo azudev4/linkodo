@@ -47,6 +47,7 @@ export function RichTextEditor({
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const prevLoadingRef = useRef<boolean>(false);
+  const isUserTypingRef = useRef<boolean>(false);
 
   // Convert markdown to HTML
   const markdownToHtml = (markdown: string): string => {
@@ -195,12 +196,32 @@ export function RichTextEditor({
     };
   }, [isMobile, showHoverCard, hoverCardUrl]);
 
-  // Update editor content when text changes
+  // Initialize editor content and sync external changes (like link insertions)
   useEffect(() => {
     if (editorRef.current) {
       const htmlContent = markdownToHtml(text);
-      if (editorRef.current.innerHTML !== htmlContent) {
+      
+      // Only update if content actually changed and user isn't currently typing
+      if (editorRef.current.innerHTML !== htmlContent && !isUserTypingRef.current) {
+        // Save cursor position before update
+        const selection = window.getSelection();
+        let savedTextOffset = 0;
+        
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0);
+          savedTextOffset = getTextOffset(editorRef.current, range.startContainer, range.startOffset);
+        }
+        
         editorRef.current.innerHTML = htmlContent;
+        
+        // Restore cursor position after update
+        if (savedTextOffset > 0) {
+          setTimeout(() => {
+            if (editorRef.current) {
+              setTextOffset(editorRef.current, savedTextOffset);
+            }
+          }, 0);
+        }
       }
     }
   }, [text]);
@@ -208,25 +229,16 @@ export function RichTextEditor({
   // Handle content changes
   const handleInput = useCallback(() => {
     if (editorRef.current) {
-      // Save cursor position before state change
-      const selection = window.getSelection();
-      let savedTextOffset = 0;
-      
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        savedTextOffset = getTextOffset(editorRef.current, range.startContainer, range.startOffset);
-      }
+      isUserTypingRef.current = true;
       
       const htmlContent = editorRef.current.innerHTML;
       const markdownContent = htmlToMarkdown(htmlContent);
       onTextChange(markdownContent);
       
-      // Restore cursor position after DOM updates
+      // Reset typing flag after a short delay
       setTimeout(() => {
-        if (editorRef.current) {
-          setTextOffset(editorRef.current, savedTextOffset);
-        }
-      }, 0);
+        isUserTypingRef.current = false;
+      }, 100);
     }
   }, [onTextChange]);
 
@@ -238,11 +250,15 @@ export function RichTextEditor({
     const range = selection.getRangeAt(0);
     const selectedText = range.toString().trim();
     
-    if (selectedText.length >= 3) {
+    if (selectedText.length >= 3 && editorRef.current) {
+      // Calculate text content positions instead of DOM positions
+      const startOffset = getTextOffset(editorRef.current, range.startContainer, range.startOffset);
+      const endOffset = getTextOffset(editorRef.current, range.endContainer, range.endOffset);
+      
       return {
         text: selectedText,
-        startOffset: range.startOffset,
-        endOffset: range.endOffset
+        startOffset: startOffset,
+        endOffset: endOffset
       };
     }
     
@@ -322,6 +338,7 @@ export function RichTextEditor({
       }
       return;
     }
+
 
     // Handle backspace for anchor deletion
     if (e.key === 'Backspace') {
