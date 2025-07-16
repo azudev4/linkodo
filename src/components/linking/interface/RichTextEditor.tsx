@@ -226,28 +226,11 @@ export function RichTextEditor({
         
         editorRef.current.innerHTML = htmlContent;
         
-        // Check if we're adding a new anchor (indicated by animate-highlight class)
-        const hasNewAnchor = htmlContent.includes('animate-highlight');
-        
-        // Restore cursor position after update and scroll to new anchor
+        // Restore cursor position after update
         if (savedTextOffset > 0) {
           setTimeout(() => {
             if (editorRef.current) {
-              // Only restore cursor if not adding a new anchor to avoid scroll conflicts
-              if (!hasNewAnchor) {
-                setTextOffset(editorRef.current, savedTextOffset);
-              }
-              
-              // Wait a bit longer for the highlight animation to be applied
-              setTimeout(() => {
-                const newAnchor = editorRef.current?.querySelector('a[class*="animate-highlight"]');
-                if (newAnchor) {
-                  newAnchor.scrollIntoView({ 
-                    behavior: 'smooth', 
-                    block: 'center' 
-                  });
-                }
-              }, 100);
+              setTextOffset(editorRef.current, savedTextOffset);
             }
           }, 0);
         }
