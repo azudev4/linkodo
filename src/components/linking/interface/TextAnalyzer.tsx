@@ -11,7 +11,7 @@ import {
   Sparkles,
   Brain,
   Copy,
-  Code
+  CheckCircle
 } from 'lucide-react';
 import { RichTextEditor } from './RichTextEditor';
 import { AnalyzedTerms } from './AnalyzedTerms';
@@ -63,6 +63,7 @@ export function TextAnalyzer() {
   const [latestLinkText, setLatestLinkText] = useState<string | null>(null);
   const [selectedOccurrenceIndex, setSelectedOccurrenceIndex] = useState<number>(0);
   const [isManualSelection, setIsManualSelection] = useState<boolean>(false);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   // Clear error after delay
   useEffect(() => {
@@ -84,6 +85,13 @@ export function TextAnalyzer() {
 
         if (targetLink) {
           targetLink.classList.add('animate-highlight');
+          
+          // Scroll to the newly highlighted anchor
+          targetLink.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+          
           setTimeout(() => {
             targetLink.classList.remove('animate-highlight');
             setLatestLinkText(null);
@@ -94,6 +102,23 @@ export function TextAnalyzer() {
       return () => clearTimeout(timeoutId);
     }
   }, [latestLinkText, text]); // Watch both latestLinkText and text changes
+
+  // Handle anchor deletion
+  const handleAnchorDeleted = (anchorText: string) => {
+    // Update analyzed terms to mark the term as no longer validated
+    setAnalyzedTerms(terms => 
+      terms.map(term => 
+        term.text === anchorText 
+          ? { ...term, isValidated: false }
+          : term
+      )
+    );
+    
+    // Remove from validated anchors
+    setValidatedAnchors(anchors => 
+      anchors.filter(anchor => anchor.anchorText !== anchorText)
+    );
+  };
 
   const clearMessages = () => {
     setError(null);
@@ -137,7 +162,7 @@ export function TextAnalyzer() {
     
     // Work with plain text version for finding occurrences
     const plainText = extractPlainText(text);
-    const termRegex = new RegExp(selectedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+    const termRegex = new RegExp(selectedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
     const matches = Array.from(plainText.matchAll(termRegex));
     
     if (matches.length === 0) {
@@ -234,18 +259,10 @@ export function TextAnalyzer() {
   const copyToMarkdown = async () => {
     try {
       await navigator.clipboard.writeText(text);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
     } catch {
       setError('Failed to copy markdown');
-    }
-  };
-
-  // Copy to HTML (convert markdown links to HTML)
-  const copyToHtml = async () => {
-    try {
-      const htmlText = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
-      await navigator.clipboard.writeText(htmlText);
-    } catch {
-      setError('Failed to copy HTML');
     }
   };
 
@@ -363,12 +380,12 @@ export function TextAnalyzer() {
       const plainText = extractPlainText(text);
       const plainStartOffset = selectedText.startOffset; // This should be adjusted based on markdown parsing
       const beforeSelection = plainText.substring(0, plainStartOffset);
-      const occurrencesBefore = (beforeSelection.match(new RegExp(termText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+      const occurrencesBefore = (beforeSelection.match(new RegExp(termText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')) || []).length;
       setSelectedOccurrenceIndex(occurrencesBefore);
     } else {
       // Normal case: calculate occurrence in the current text
       const beforeSelection = text.substring(0, selectedText.startOffset);
-      const occurrencesBefore = (beforeSelection.match(new RegExp(termText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+      const occurrencesBefore = (beforeSelection.match(new RegExp(termText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')) || []).length;
       setSelectedOccurrenceIndex(occurrencesBefore);
     }
     
@@ -515,6 +532,7 @@ export function TextAnalyzer() {
             }}
             isLoading={isLoading}
             error={error}
+            onAnchorDeleted={handleAnchorDeleted}
           />
 
           <div className="flex items-center justify-between pt-4">
@@ -544,19 +562,23 @@ export function TextAnalyzer() {
                 onClick={copyToMarkdown}
                 variant="outline"
                 size="sm"
-                className="text-xs"
+                className={`text-xs transition-all duration-300 ${
+                  copySuccess 
+                    ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' 
+                    : ''
+                }`}
               >
-                <Copy className="w-3 h-3 mr-1" />
-                Copy Markdown
-              </Button>
-              <Button
-                onClick={copyToHtml}
-                variant="outline"
-                size="sm"
-                className="text-xs"
-              >
-                <Code className="w-3 h-3 mr-1" />
-                Copy HTML
+                {copySuccess ? (
+                  <>
+                    <CheckCircle className="w-3 h-3 mr-1 animate-pulse" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3 mr-1" />
+                    Copy Markdown
+                  </>
+                )}
               </Button>
               <Button
                 onClick={clearAll}

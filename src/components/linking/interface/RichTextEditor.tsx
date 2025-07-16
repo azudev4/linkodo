@@ -24,6 +24,7 @@ interface RichTextEditorProps {
   onFindLinks: () => void;
   isLoading: boolean;
   error?: string | null;
+  onAnchorDeleted?: (anchorText: string) => void;
 }
 
 export function RichTextEditor({
@@ -33,7 +34,8 @@ export function RichTextEditor({
   onSelectionChange,
   onFindLinks,
   isLoading,
-  error
+  error,
+  onAnchorDeleted
 }: RichTextEditorProps) {
   const isMobile = useIsMobile();
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -388,6 +390,11 @@ export function RichTextEditor({
         const textNode = document.createTextNode(anchorText);
         anchorElement.parentNode?.replaceChild(textNode, anchorElement);
         
+        // Notify parent that anchor was deleted
+        if (onAnchorDeleted) {
+          onAnchorDeleted(anchorText);
+        }
+        
         // Trigger input event to update markdown (handleInput will preserve cursor)
         if (editorRef.current) {
           const inputEvent = new Event('input', { bubbles: true });
@@ -407,6 +414,11 @@ export function RichTextEditor({
           const anchorText = previousSibling.textContent || '';
           const textNode = document.createTextNode(anchorText);
           previousSibling.parentNode?.replaceChild(textNode, previousSibling);
+          
+          // Notify parent that anchor was deleted
+          if (onAnchorDeleted) {
+            onAnchorDeleted(anchorText);
+          }
           
           // Trigger input event to update markdown (handleInput will preserve cursor)
           if (editorRef.current) {
@@ -428,6 +440,11 @@ export function RichTextEditor({
           const anchorText = elementBefore.textContent || '';
           const textNode = document.createTextNode(anchorText);
           elementBefore.parentNode?.replaceChild(textNode, elementBefore);
+          
+          // Notify parent that anchor was deleted
+          if (onAnchorDeleted) {
+            onAnchorDeleted(anchorText);
+          }
           
           // Trigger input event to update markdown (handleInput will preserve cursor)
           if (editorRef.current) {
