@@ -47,7 +47,7 @@ interface ValidatedAnchor {
 }
 
 export function TextAnalyzer() {
-  const [text, setText] = useState(`Lorsque vous planifiez votre potager pour cette saison...`);
+  const [text, setText] = useState(``);
   
   const loadingRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);

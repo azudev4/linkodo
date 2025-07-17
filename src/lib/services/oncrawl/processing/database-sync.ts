@@ -1,6 +1,6 @@
 // src/lib/services/oncrawl/processing/database-sync.ts - OPTIMIZED VERSION
 import { supabase } from '@/lib/db/client';
-import { ProcessedOnCrawlPage, FilterStats, DatabasePage } from '../types';
+import { ProcessedOnCrawlPage, FilterStats, DatabasePage, SyncMode } from '../types';
 import { hasPageChanged } from './page-normalizer';
 
 /**
@@ -32,7 +32,7 @@ export async function fetchExistingPagesOptimized(projectName: string): Promise<
   for (let offset = 0; offset < totalPages; offset += batchSize) {
     const { data: batch, error } = await supabase
       .from('pages')
-      .select('url, title, meta_description, h1, word_count, category, depth, inrank_decimal, internal_outlinks, nb_inlinks, embedding, project_name, updated_at, status_code')
+      .select('url, title, meta_description, h1, word_count, category, depth, inrank_decimal, internal_outlinks, nb_inlinks, project_name, updated_at')
       .eq('project_name', projectName)
       .range(offset, offset + batchSize - 1);
     
@@ -60,7 +60,8 @@ export async function fetchExistingPagesOptimized(projectName: string): Promise<
  */
 export function categorizePagesOptimized(
   filteredPages: ProcessedOnCrawlPage[],
-  existingPageMap: Map<string, DatabasePage>
+  existingPageMap: Map<string, DatabasePage>,
+  syncMode: SyncMode = SyncMode.FULL
 ): {
   newPages: ProcessedOnCrawlPage[];
   changedPages: ProcessedOnCrawlPage[];
@@ -80,7 +81,7 @@ export function categorizePagesOptimized(
     
     if (!existing) {
       newPages.push(page);
-    } else if (hasPageChanged(existing, page)) {
+    } else if (hasPageChanged(existing, page, syncMode)) {
       changedPages.push(page);
     } else {
       unchangedPages.push(page);
@@ -272,7 +273,8 @@ export async function optimizedSmartSync(
   filteredPages: ProcessedOnCrawlPage[],
   syncHistoryId: number,
   projectName: string,
-  filterStats: FilterStats
+  filterStats: FilterStats,
+  syncMode: SyncMode = SyncMode.FULL
 ): Promise<{
   added: number; updated: number; unchanged: number; failed: number; removed: number;
   filteredNoContent: number; filteredUrlPatterns: number; filteredForumContent: number;
@@ -286,7 +288,8 @@ export async function optimizedSmartSync(
   // 2. Categorize pages
   const { newPages, changedPages, unchangedPages, staleUrls } = categorizePagesOptimized(
     filteredPages, 
-    existingPageMap
+    existingPageMap,
+    syncMode
   );
   
   // 3. Execute direct operations

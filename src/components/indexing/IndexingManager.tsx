@@ -15,6 +15,7 @@ interface OnCrawlProject {
   url: string;
   workspace_id: string;
   last_crawl_id?: string;
+  tokenSource?: string;
 }
 
 
@@ -96,7 +97,8 @@ export function IndexingManager() {
         if (data.removed > 0) parts.push(`🗑️ ${data.removed} removed`);
         
         const breakdown = parts.length > 0 ? parts.join(', ') : 'No changes';
-        const modeLabel = data.syncMode === SyncMode.URL_ONLY ? '⚡ Quick' : '🔄 Full';
+        const modeLabel = data.syncMode === SyncMode.URL_ONLY ? '⚡ Quick' : 
+                         data.syncMode === SyncMode.CONTENT ? '📝 Content' : '🔄 Full';
         const duration = data.duration_ms || 0;
         const rate = duration > 0 ? Math.round(data.processed / (duration / 1000)) : 0;
         

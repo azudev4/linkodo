@@ -12,11 +12,13 @@ import { processOnCrawlPage } from './processing/page-normalizer';
 export async function syncPagesFromOnCrawlOptimized(
   projectId: string,
   syncMode: SyncMode = SyncMode.FULL,
+  token?: string,
   onProgress?: (processed: number, total: number) => void
 ): Promise<SyncResult> {
-  const client = new OnCrawlClient(process.env.ONCRAWL_API_TOKEN!);
+  const client = new OnCrawlClient(token || process.env.ONCRAWL_API_TOKEN!);
   
-  const syncModeLabel = syncMode === SyncMode.URL_ONLY ? 'URL-ONLY' : 'FULL';
+  const syncModeLabel = syncMode === SyncMode.URL_ONLY ? 'URL-ONLY' : 
+                       syncMode === SyncMode.CONTENT ? 'CONTENT' : 'FULL';
   console.log(`🚀 Starting ${syncModeLabel} sync with content filtering for project: ${projectId}`);
   const overallStartTime = Date.now();
   
@@ -72,7 +74,7 @@ export async function syncPagesFromOnCrawlOptimized(
     
     const result = syncMode === SyncMode.URL_ONLY 
       ? await optimizedUrlOnlySync(indexablePages, syncHistoryId, projectName, filterStats)
-      : await optimizedSmartSync(indexablePages, syncHistoryId, projectName, filterStats);
+      : await optimizedSmartSync(indexablePages, syncHistoryId, projectName, filterStats, syncMode);
     
     const syncDuration = Date.now() - syncStartTime;
     const overallDuration = Date.now() - overallStartTime;
@@ -80,7 +82,8 @@ export async function syncPagesFromOnCrawlOptimized(
     // 5. Update sync history with final results
     await updateSyncHistoryRecord(syncHistoryId, result, overallDuration);
     
-    const speedNote = syncMode === SyncMode.URL_ONLY ? ' (⚡ URL-only mode - much faster!)' : '';
+    const speedNote = syncMode === SyncMode.URL_ONLY ? ' (⚡ URL-only mode - much faster!)' : 
+                     syncMode === SyncMode.CONTENT ? ' (📝 Content mode - ignores metrics)' : '';
     console.log(`🎉 ${syncModeLabel} sync with content filtering completed in ${overallDuration}ms${speedNote}:
       📝 Sync History ID: ${syncHistoryId} ✅
       📡 OnCrawl fetch: ${fetchDuration}ms

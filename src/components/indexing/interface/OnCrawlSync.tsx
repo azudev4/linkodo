@@ -4,8 +4,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Progress } from '@/components/ui/progress';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { motion } from 'framer-motion';
-import { Database, Download, Loader2, FileText, Zap as ZapIcon, HelpCircle } from 'lucide-react';
+import { Database, Download, Loader2, FileText, Zap as ZapIcon, HelpCircle, Edit3, AlertTriangle, Mail } from 'lucide-react';
 import { SyncMode } from '@/lib/services/oncrawl/types';
+import { useState } from 'react';
 
 interface OnCrawlProject {
   id: string;
@@ -13,6 +14,7 @@ interface OnCrawlProject {
   url: string;
   workspace_id: string;
   last_crawl_id?: string;
+  tokenSource?: string;
 }
 
 interface OnCrawlSyncProps {
@@ -36,8 +38,10 @@ export function OnCrawlSync({
   isDownloading,
   syncProgress
 }: OnCrawlSyncProps) {
+  const [showWarning, setShowWarning] = useState(true);
+  
   return (
-    <Card className="border-2 shadow-lg hover:shadow-xl transition-all duration-300">
+    <Card className="border-2 shadow-lg hover:shadow-xl transition-all duration-300 relative">
       <CardHeader>
         <CardTitle className="flex items-center space-x-3">
           <div className="rounded-full bg-green-100 p-2">
@@ -60,7 +64,14 @@ export function OnCrawlSync({
             <SelectContent position="popper" className="max-h-[300px]">
               {projects.map((project) => (
                 <SelectItem key={project.id} value={project.id}>
-                  {project.name}
+                  <div className="flex items-center justify-between w-full">
+                    <span>{project.name}</span>
+                    {project.tokenSource && (
+                      <span className="text-xs text-gray-500 ml-2">
+                        ({project.tokenSource === 'token2' ? 'Token 2' : 'Token 1'})
+                      </span>
+                    )}
+                  </div>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -88,7 +99,7 @@ export function OnCrawlSync({
             <Button
               onClick={() => onSync(SyncMode.URL_ONLY)}
               disabled={!selectedProject || isSyncing}
-              className="flex-[2] h-14 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 text-lg"
+              className="flex-1 h-14 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 text-lg"
               size="lg"
             >
               {isSyncing ? (
@@ -105,9 +116,28 @@ export function OnCrawlSync({
             </Button>
 
             <Button
+              onClick={() => onSync(SyncMode.CONTENT)}
+              disabled={!selectedProject || isSyncing}
+              className="flex-1 h-14 rounded-xl bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
+              size="lg"
+            >
+              {isSyncing ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  <span className="font-medium">Syncing...</span>
+                </>
+              ) : (
+                <>
+                  <Edit3 className="w-5 h-5 mr-2" />
+                  <span className="font-medium">Content Sync</span>
+                </>
+              )}
+            </Button>
+
+            <Button
               onClick={() => onSync(SyncMode.FULL)}
               disabled={!selectedProject || isSyncing}
-              className="flex-1 h-12 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
+              className="flex-1 h-14 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
               size="lg"
             >
               {isSyncing ? (
@@ -131,9 +161,14 @@ export function OnCrawlSync({
               <span className="ml-1.5">Adds new & removes old pages - <span className="font-medium text-emerald-600">10x faster</span></span>
             </div>
             <div className="flex items-center">
+              <Edit3 className="w-4 h-4 mr-1.5 text-purple-500" />
+              <span className="font-medium text-gray-700">Content Sync:</span>
+              <span className="ml-1.5">Updates h1, title, meta (ignores metrics that change frequently)</span>
+            </div>
+            <div className="flex items-center">
               <Download className="w-4 h-4 mr-1.5 text-blue-500" />
               <span className="font-medium text-gray-700">Full Sync:</span>
-              <span className="ml-1.5">Detects & updates content/data changes</span>
+              <span className="ml-1.5">Detects & updates all content/data changes</span>
               <HoverCard>
                 <HoverCardTrigger asChild>
                   <div className="inline-flex ml-1.5 cursor-help">
@@ -187,6 +222,58 @@ export function OnCrawlSync({
           </div>
         </div>
       </CardContent>
+      
+      {/* Vercel Warning Overlay */}
+      {showWarning && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-lg flex items-center justify-center z-10"
+        >
+          <div className="bg-white/90 backdrop-blur-md rounded-xl border-2 border-amber-200 shadow-xl p-8 max-w-md mx-4">
+            <div className="text-center space-y-4">
+              <div className="flex justify-center">
+                <div className="rounded-full bg-amber-100 p-3">
+                  <AlertTriangle className="w-8 h-8 text-amber-600" />
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Vercel Function Limitations
+                </h3>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  This feature might not work properly with Vercel&apos;s function execution limitations. 
+                  Large syncs may timeout or fail.
+                </p>
+              </div>
+              
+              <div className="flex flex-col gap-3">
+                <Button
+                  onClick={() => setShowWarning(false)}
+                  className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-medium"
+                >
+                  I understand, proceed anyway
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  onClick={() => window.open('mailto:anthod.pro@gmail.com?subject=Vercel%20Function%20Help&body=Hi%2C%20I%20need%20help%20with%20Vercel%20function%20limitations%20for%20OnCrawl%20sync.', '_blank')}
+                  className="w-full border-2 border-blue-200 hover:bg-blue-50 hover:border-blue-300 transition-all duration-200"
+                >
+                  <Mail className="w-4 h-4 mr-2" />
+                  Contact for help
+                </Button>
+              </div>
+              
+              <p className="text-xs text-gray-500 mt-3">
+                anthod.pro@gmail.com
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
     </Card>
   );
 } 

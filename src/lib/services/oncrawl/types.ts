@@ -6,8 +6,9 @@
  * Sync mode for controlling the depth of synchronization
  */
 export enum SyncMode {
-  URL_ONLY = 'url_only',    // Fast: just add/remove pages
-  FULL = 'full'             // Thorough: compare all content fields
+  URL_ONLY = 'url_only',    // ⚡ Fast: just add/remove pages by URL
+  CONTENT = 'content',      // 📝 Content: compare h1, title, meta (ignores metrics that change frequently)
+  FULL = 'full'             // 🔄 Full: compare all fields including inrank, links, etc.
 }
 
 /**
@@ -23,14 +24,14 @@ export interface OnCrawlPage {
   inrank_decimal: string | null;
   internal_outlinks: string | null;
   nb_inlinks: string | null;
-  status_code: string | null;
+  status_code?: string | null;
 }
 
 /**
  * Database page type that extends OnCrawlPage with database-specific fields
  */
 export interface DatabasePage extends OnCrawlPage {
-  embedding: number[] | null;
+  embedding?: number[] | null;
   project_name: string;
   updated_at: string;
 }

@@ -119,17 +119,80 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
-    const client = new OnCrawlClient(process.env.ONCRAWL_API_TOKEN);
+    const projectId = searchParams.get('projectId');
     
-    // Get all projects
+    // Get all projects from both tokens
     if (action === 'projects') {
-      const projects = await client.getProjects();
-      return NextResponse.json({ success: true, projects });
+      const client1 = new OnCrawlClient(process.env.ONCRAWL_API_TOKEN);
+      const allProjects = [];
+      
+      try {
+        const projects1 = await client1.getProjects();
+        // Add token identifier to each project
+        const projectsWithToken1 = projects1.map(project => ({
+          ...project,
+          tokenSource: 'token1'
+        }));
+        allProjects.push(...projectsWithToken1);
+      } catch (error) {
+        console.error('Error fetching projects from token 1:', error);
+      }
+      
+      // If second token exists, fetch projects from it too
+      if (process.env.ONCRAWL_API_TOKEN_2) {
+        const client2 = new OnCrawlClient(process.env.ONCRAWL_API_TOKEN_2);
+        try {
+          const projects2 = await client2.getProjects();
+          // Add token identifier to each project
+          const projectsWithToken2 = projects2.map(project => ({
+            ...project,
+            tokenSource: 'token2'
+          }));
+          allProjects.push(...projectsWithToken2);
+        } catch (error) {
+          console.error('Error fetching projects from token 2:', error);
+        }
+      }
+      
+      return NextResponse.json({ success: true, projects: allProjects });
     }
+    
+    // For other actions, we need to determine which token to use
+    const getClientForProject = async (projectId: string) => {
+      if (!projectId) return new OnCrawlClient(process.env.ONCRAWL_API_TOKEN!);
+      
+      // First try to find the project in token 1
+      const client1 = new OnCrawlClient(process.env.ONCRAWL_API_TOKEN!);
+      try {
+        const projects1 = await client1.getProjects();
+        if (projects1.find(p => p.id === projectId)) {
+          return client1;
+        }
+      } catch (error) {
+        console.error('Error checking token 1 for project:', error);
+      }
+      
+      // If not found and token 2 exists, try token 2
+      if (process.env.ONCRAWL_API_TOKEN_2) {
+        const client2 = new OnCrawlClient(process.env.ONCRAWL_API_TOKEN_2);
+        try {
+          const projects2 = await client2.getProjects();
+          if (projects2.find(p => p.id === projectId)) {
+            return client2;
+          }
+        } catch (error) {
+          console.error('Error checking token 2 for project:', error);
+        }
+      }
+      
+      // Default to token 1 if not found
+      return client1;
+    };
+    
+    const client = await getClientForProject(projectId || '');
     
     // Download Excel file with latest accessible crawl data
     if (action === 'download') {
-      const projectId = searchParams.get('projectId');
       
       if (!projectId) {
         return NextResponse.json({ error: 'projectId required' }, { status: 400 });
@@ -182,17 +245,50 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'projectId required' }, { status: 400 });
     }
     
+    // Determine which token to use for this project
+    const getTokenForProject = async (projectId: string) => {
+      // First try to find the project in token 1
+      const client1 = new OnCrawlClient(process.env.ONCRAWL_API_TOKEN!);
+      try {
+        const projects1 = await client1.getProjects();
+        if (projects1.find(p => p.id === projectId)) {
+          return process.env.ONCRAWL_API_TOKEN;
+        }
+      } catch (error) {
+        console.error('Error checking token 1 for project:', error);
+      }
+      
+      // If not found and token 2 exists, try token 2
+      if (process.env.ONCRAWL_API_TOKEN_2) {
+        const client2 = new OnCrawlClient(process.env.ONCRAWL_API_TOKEN_2);
+        try {
+          const projects2 = await client2.getProjects();
+          if (projects2.find(p => p.id === projectId)) {
+            return process.env.ONCRAWL_API_TOKEN_2;
+          }
+        } catch (error) {
+          console.error('Error checking token 2 for project:', error);
+        }
+      }
+      
+      // Default to token 1 if not found
+      return process.env.ONCRAWL_API_TOKEN;
+    };
+    
+    const token = await getTokenForProject(projectId);
+    
     // Validate sync mode
     const validSyncMode = syncMode && Object.values(SyncMode).includes(syncMode) 
       ? syncMode as SyncMode 
       : SyncMode.FULL;
     
-    const syncModeLabel = validSyncMode === SyncMode.URL_ONLY ? 'URL-ONLY' : 'FULL';
-    console.log(`🚀 Starting ${syncModeLabel} sync for project: ${projectId}`);
+    const syncModeLabel = validSyncMode === SyncMode.URL_ONLY ? 'URL-ONLY' : 
+                         validSyncMode === SyncMode.CONTENT ? 'CONTENT' : 'FULL';
+    console.log(`🚀 Starting ${syncModeLabel} sync for project: ${projectId} using ${token === process.env.ONCRAWL_API_TOKEN ? 'token 1' : 'token 2'}`);
     const startTime = Date.now();
     
-    // Use the sync function with the specified mode
-    const result = await syncPagesFromOnCrawlOptimized(projectId, validSyncMode);
+    // Use the sync function with the specified mode and token
+    const result = await syncPagesFromOnCrawlOptimized(projectId, validSyncMode, token);
     
     const duration = Date.now() - startTime;
     const rate = duration > 0 ? Math.round(result.processed / (duration / 1000)) : 0;
@@ -209,11 +305,15 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({ 
       success: true, 
-      result: {
-        ...result,
-        duration,
-        rate
-      }
+      syncMode: validSyncMode,
+      duration_ms: duration,
+      rate,
+      processed: result.processed,
+      added: result.added,
+      updated: result.updated,
+      unchanged: result.unchanged,
+      removed: result.removed,
+      failed: result.failed
     });
     
   } catch (error: unknown) {

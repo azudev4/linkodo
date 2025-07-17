@@ -1,5 +1,5 @@
 // src/lib/services/oncrawl/page-normalizer.ts
-import { OnCrawlPage, ProcessedOnCrawlPage } from '../types';
+import { OnCrawlPage, ProcessedOnCrawlPage, SyncMode } from '../types';
 
 /**
  * Convert string values to numbers (OnCrawl returns everything as strings)
@@ -58,8 +58,9 @@ export function processOnCrawlPage(page: OnCrawlPage): ProcessedOnCrawlPage {
 
 /**
  * Check if a page has actually changed compared to existing data
+ * Different sync modes check different fields for changes
  */
-export function hasPageChanged(existing: OnCrawlPage, newPage: ProcessedOnCrawlPage): boolean {
+export function hasPageChanged(existing: OnCrawlPage, newPage: ProcessedOnCrawlPage, syncMode: SyncMode = SyncMode.FULL): boolean {
   const normalizeString = (value: unknown): string | null => {
     if (value === null || value === undefined || value === "") return null;
     return String(value).trim() || null;
@@ -72,10 +73,18 @@ export function hasPageChanged(existing: OnCrawlPage, newPage: ProcessedOnCrawlP
     return Math.round(num * 1000000) / 1000000;
   };
 
+  // Always check content fields
   const titleChanged = normalizeString(existing.title) !== normalizeString(newPage.title);
   const metaDescChanged = normalizeString(existing.meta_description) !== normalizeString(newPage.metaDescription);
   const h1Changed = normalizeString(existing.h1) !== normalizeString(newPage.h1);  
   const wordCountChanged = normalizeNumber(existing.word_count) !== normalizeNumber(newPage.wordCount);
+  
+  // Content mode: Only check content fields (h1, title, meta, word_count)
+  if (syncMode === SyncMode.CONTENT) {
+    return titleChanged || metaDescChanged || h1Changed || wordCountChanged;
+  }
+  
+  // Full mode: Check all fields including metrics that change frequently
   const depthChanged = normalizeNumber(existing.depth) !== normalizeNumber(newPage.depth);
   const inrankChanged = normalizeNumber(existing.inrank_decimal) !== normalizeNumber(newPage.inrankDecimal);
   const outlinkChanged = normalizeNumber(existing.internal_outlinks) !== normalizeNumber(newPage.internalOutlinks);
