@@ -22,7 +22,6 @@ export function IndexingManager() {
   const { 
     stats, 
     isLoading: isLoadingStats, 
-    error: statsError, 
     refreshStats 
   } = useStatsCache();
   const [projects, setProjects] = useState<OnCrawlProject[]>([]);

@@ -439,7 +439,7 @@ export function RichTextEditor({
         }
       }
     }
-  }, []);
+  }, [onAnchorDeleted]);
 
   // Get button styles based on state
   const getButtonState = () => {

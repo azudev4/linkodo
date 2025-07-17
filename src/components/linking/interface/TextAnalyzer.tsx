@@ -64,6 +64,7 @@ export function TextAnalyzer() {
   const [selectedOccurrenceIndex, setSelectedOccurrenceIndex] = useState<number>(0);
   const [isManualSelection, setIsManualSelection] = useState<boolean>(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [copyHtmlSuccess, setCopyHtmlSuccess] = useState(false);
 
   // Clear error after delay
   useEffect(() => {
@@ -255,6 +256,32 @@ export function TextAnalyzer() {
     // The RichTextEditor will handle scrolling to the new anchor automatically
   };
 
+  // Decode HTML entities
+  const decodeHtmlEntities = (text: string): string => {
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = text;
+    return textarea.value;
+  };
+
+  // Convert markdown to HTML
+  const markdownToHtml = (markdownText: string): string => {
+    // First decode HTML entities to clean up the text
+    const cleanText = decodeHtmlEntities(markdownText);
+    
+    // Convert markdown links [text](url) to HTML links <a href="url">text</a>
+    return cleanText.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, linkText, url) => {
+      // Find the suggestion that matches this URL to get the title
+      const allSuggestions = analyzedTerms.flatMap(term => term.suggestions);
+      const matchingSuggestion = allSuggestions.find(suggestion => suggestion.url === url);
+      
+      if (matchingSuggestion && matchingSuggestion.title) {
+        return `<a href="${url}" title="${matchingSuggestion.title}">${linkText}</a>`;
+      } else {
+        return `<a href="${url}">${linkText}</a>`;
+      }
+    });
+  };
+
   // Copy to markdown (current format)
   const copyToMarkdown = async () => {
     try {
@@ -263,6 +290,18 @@ export function TextAnalyzer() {
       setTimeout(() => setCopySuccess(false), 2000);
     } catch {
       setError('Failed to copy markdown');
+    }
+  };
+
+  // Copy to HTML
+  const copyToHtml = async () => {
+    try {
+      const htmlText = markdownToHtml(text);
+      await navigator.clipboard.writeText(htmlText);
+      setCopyHtmlSuccess(true);
+      setTimeout(() => setCopyHtmlSuccess(false), 2000);
+    } catch {
+      setError('Failed to copy HTML');
     }
   };
 
@@ -577,6 +616,28 @@ export function TextAnalyzer() {
                   <>
                     <Copy className="w-3 h-3 mr-1" />
                     Copy Markdown
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={copyToHtml}
+                variant="outline"
+                size="sm"
+                className={`text-xs transition-all duration-300 ${
+                  copyHtmlSuccess 
+                    ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' 
+                    : ''
+                }`}
+              >
+                {copyHtmlSuccess ? (
+                  <>
+                    <CheckCircle className="w-3 h-3 mr-1 animate-pulse" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3 mr-1" />
+                    Copy HTML
                   </>
                 )}
               </Button>
