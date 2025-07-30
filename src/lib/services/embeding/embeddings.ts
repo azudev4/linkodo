@@ -15,15 +15,15 @@ export async function generateEmbedding(
   const textParts: string[] = [];
   
   if (title) {
-    textParts.push(title, title); // 3x weight
+    textParts.push(title, title); 
   }
   
   if (h1 && h1 !== title) {
-    textParts.push(h1, h1); // 2x weight
+    textParts.push(h1, h1); 
   }
   
   if (metaDescription) {
-    textParts.push(metaDescription); // 1x weight
+    textParts.push(metaDescription); 
   }
   
   const combinedText = textParts.join(' ');
@@ -219,14 +219,13 @@ export async function generateEmbeddingsOptimized(): Promise<{ processed: number
           if (updateError) throw updateError;
           return { success: true, shouldRetry: false };
           
-        } catch (error: unknown) {
-          const err = error as { status?: number; message?: string };
-          if (err.status === 429) {
+        } catch (error: any) {
+          if (error.status === 429) {
             console.log(`⏱️ Rate limit hit for page ${page.id}, will retry later`);
             return { success: false, shouldRetry: true };
           }
           
-          console.error(`❌ Failed to process page ${page.id}:`, err.message || 'Unknown error');
+          console.error(`❌ Failed to process page ${page.id}:`, error.message);
           return { success: false, shouldRetry: false };
         }
       }));
