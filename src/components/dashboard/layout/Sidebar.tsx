@@ -10,13 +10,13 @@ import { Search, Database, X, Menu } from 'lucide-react';
 const navigation = [
   {
     name: 'Analyze',
-    href: '/',
+    href: '/dashboard',
     icon: Search,
     description: 'Analyze content for internal link suggestions'
   },
   {
     name: 'Indexing',
-    href: '/indexing',
+    href: '/dashboard/indexing',
     icon: Database,
     description: 'Manage data sync and AI embeddings'
   },
