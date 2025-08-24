@@ -6,8 +6,8 @@ import { AppShell } from "@/components/layout/AppShell";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Cambium Linking - Internal Link Tool",
-  description: "Cambium Media's internal linking tool powered by OnCrawl data for SEO optimization",
+  title: "Linkodo - Internal Link Tool",
+  description: "Internal linking tool for SEO optimization with custom crawling and AI-powered suggestions",
 };
 
 export default function RootLayout({

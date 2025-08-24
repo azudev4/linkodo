@@ -1,11 +1,22 @@
 // src/lib/services/embeding/embedding-matcher.ts - ENHANCED WITH DEBUG LOGS AND WEIGHTED EMBEDDINGS
 import { supabase } from '@/lib/db/client';
 import { generateEmbedding, embeddingFromString } from './embeddings';
-import { DatabasePage } from '@/lib/services/oncrawl/types';
+// DEPRECATED: Removed OnCrawl dependency
+// import { DatabasePage } from '@/lib/services/oncrawl/types';
+
+// Define the interface locally since OnCrawl is removed
+interface DatabasePage {
+  id: string;
+  url: string;
+  title?: string | null;
+  meta_description?: string | null;
+  h1?: string | null;
+}
 
 interface DatabasePageWithId extends DatabasePage {
   id: string;
   similarity: number;
+  embedding?: any; // Raw embedding data from database
 }
 
 // Default configuration values

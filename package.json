@@ -1,14 +1,15 @@
 {
-  "name": "cambium-linking",
+  "name": "linkodo",
   "version": "0.1.0",
   "private": true,
-  "description": "Cambium Linking - Internal linking tool for Cambium Media using OnCrawl",
-  "author": "Cambium Media",
+  "description": "Linkodo - Internal linking tool with custom crawling and AI-powered suggestions",
+  "author": "Linkodo Team",
   "keywords": [
     "internal linking",
     "seo",
-    "oncrawl",
-    "cambium media"
+    "custom crawler",
+    "ai suggestions",
+    "link optimization"
   ],
   "scripts": {
     "dev": "next dev",
@@ -66,7 +67,6 @@
     "sonner": "^2.0.5",
     "tailwind-merge": "^3.3.1",
     "vaul": "^1.1.2",
-    "xlsx": "^0.18.5",
     "zod": "^3.25.67"
   },
   "devDependencies": {

@@ -1,5 +1,7 @@
 /**
  * Decode HTML entities in text fields from OnCrawl
+ * DEPRECATED: This file is no longer used with OnCrawl but contains useful 
+ * HTML entity decoding utilities that might be useful for our custom crawler implementation
  */
 export function decodeHtmlEntities(text: string | null): string | null {
   if (!text) return text;

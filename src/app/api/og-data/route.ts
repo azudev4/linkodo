@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { decodeHtmlEntities } from '@/lib/utils/html-entities';
+import { decodeHtmlEntities } from '@/lib/utils/deprecated/html-entities';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);

@@ -1,6 +1,10 @@
 /**
  * Site-specific patterns to exclude from indexing
  * Specific to Rustica/SystemD content
+ * 
+ * DEPRECATED: This file is no longer used with OnCrawl but contains extremely useful 
+ * link filtering utilities including forum detection, pagination filtering, and comprehensive 
+ * URL exclusion patterns that should be preserved for our custom crawler implementation
  */
 export const SITE_SPECIFIC_EXCLUDED_PATTERNS = [
   // Forum and legacy content

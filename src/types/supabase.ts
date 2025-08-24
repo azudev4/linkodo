@@ -7,224 +7,167 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "12.2.3 (519615d)"
+    PostgrestVersion: "13.0.4"
   }
   public: {
     Tables: {
-      pages: {
+      crawl_sessions: {
         Row: {
-          category: string | null
+          client_name: string | null
+          completed_at: string | null
           created_at: string | null
-          depth: number | null
-          embedding: string | null
-          h1: string | null
+          domain: string
           id: string
-          inrank_decimal: number | null
-          internal_outlinks: number | null
-          meta_description: string | null
-          nb_inlinks: number | null
-          title: string | null
+          started_at: string | null
+          status: string | null
+          total_pages: number | null
           updated_at: string | null
-          url: string
-          word_count: number | null
         }
         Insert: {
-          category?: string | null
+          client_name?: string | null
+          completed_at?: string | null
           created_at?: string | null
-          depth?: number | null
-          embedding?: string | null
-          h1?: string | null
+          domain: string
           id?: string
-          inrank_decimal?: number | null
-          internal_outlinks?: number | null
-          meta_description?: string | null
-          nb_inlinks?: number | null
-          title?: string | null
+          started_at?: string | null
+          status?: string | null
+          total_pages?: number | null
           updated_at?: string | null
-          url: string
-          word_count?: number | null
         }
         Update: {
-          category?: string | null
+          client_name?: string | null
+          completed_at?: string | null
           created_at?: string | null
-          depth?: number | null
-          embedding?: string | null
-          h1?: string | null
+          domain?: string
           id?: string
-          inrank_decimal?: number | null
-          internal_outlinks?: number | null
-          meta_description?: string | null
-          nb_inlinks?: number | null
-          title?: string | null
+          started_at?: string | null
+          status?: string | null
+          total_pages?: number | null
           updated_at?: string | null
-          url?: string
-          word_count?: number | null
         }
         Relationships: []
       }
-      sync_history: {
+      pages: {
         Row: {
-          crawl_id: string
-          crawl_name: string | null
-          created_at: string | null
-          duration_ms: number | null
-          id: number
-          pages_added: number | null
-          pages_failed: number | null
-          pages_removed: number | null
-          pages_unchanged: number | null
-          pages_updated: number | null
-          project_id: string
-          project_name: string
-          synced_at: string | null
+          content_hash: string | null
+          crawled_at: string | null
+          h1_tags: Json | null
+          id: string
+          link_hash: string | null
+          links: Json | null
+          meta_description: string | null
+          robots_content: string | null
+          session_id: string
+          status_code: number | null
+          title: string | null
+          url: string
         }
         Insert: {
-          crawl_id: string
-          crawl_name?: string | null
-          created_at?: string | null
-          duration_ms?: number | null
-          id?: number
-          pages_added?: number | null
-          pages_failed?: number | null
-          pages_removed?: number | null
-          pages_unchanged?: number | null
-          pages_updated?: number | null
-          project_id: string
-          project_name: string
-          synced_at?: string | null
+          content_hash?: string | null
+          crawled_at?: string | null
+          h1_tags?: Json | null
+          id?: string
+          link_hash?: string | null
+          links?: Json | null
+          meta_description?: string | null
+          robots_content?: string | null
+          session_id: string
+          status_code?: number | null
+          title?: string | null
+          url: string
         }
         Update: {
-          crawl_id?: string
-          crawl_name?: string | null
-          created_at?: string | null
-          duration_ms?: number | null
-          id?: number
-          pages_added?: number | null
-          pages_failed?: number | null
-          pages_removed?: number | null
-          pages_unchanged?: number | null
-          pages_updated?: number | null
-          project_id?: string
-          project_name?: string
-          synced_at?: string | null
+          content_hash?: string | null
+          crawled_at?: string | null
+          h1_tags?: Json | null
+          id?: string
+          link_hash?: string | null
+          links?: Json | null
+          meta_description?: string | null
+          robots_content?: string | null
+          session_id?: string
+          status_code?: number | null
+          title?: string | null
+          url?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "crawl_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      raw_pages: {
+        Row: {
+          content_hash: string | null
+          crawled_at: string | null
+          created_at: string | null
+          h1_tags: Json | null
+          id: string
+          link_hash: string | null
+          links: Json | null
+          meta_description: string | null
+          robots_content: string | null
+          session_id: string
+          status_code: number | null
+          title: string | null
+          updated_at: string | null
+          url: string
+        }
+        Insert: {
+          content_hash?: string | null
+          crawled_at?: string | null
+          created_at?: string | null
+          h1_tags?: Json | null
+          id?: string
+          link_hash?: string | null
+          links?: Json | null
+          meta_description?: string | null
+          robots_content?: string | null
+          session_id: string
+          status_code?: number | null
+          title?: string | null
+          updated_at?: string | null
+          url: string
+        }
+        Update: {
+          content_hash?: string | null
+          crawled_at?: string | null
+          created_at?: string | null
+          h1_tags?: Json | null
+          id?: string
+          link_hash?: string | null
+          links?: Json | null
+          meta_description?: string | null
+          robots_content?: string | null
+          session_id?: string
+          status_code?: number | null
+          title?: string | null
+          updated_at?: string | null
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "raw_pages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "crawl_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      binary_quantize: {
-        Args: { "": string } | { "": unknown }
-        Returns: unknown
-      }
-      find_similar_pages: {
-        Args: {
-          query_embedding: string
-          similarity_threshold?: number
-          match_limit?: number
-        }
-        Returns: {
-          id: string
-          url: string
-          title: string
-          meta_description: string
-          h1: string
-          similarity: number
-        }[]
-      }
-      halfvec_avg: {
-        Args: { "": number[] }
-        Returns: unknown
-      }
-      halfvec_out: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      halfvec_send: {
-        Args: { "": unknown }
-        Returns: string
-      }
-      halfvec_typmod_in: {
-        Args: { "": unknown[] }
-        Returns: number
-      }
-      hnsw_bit_support: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      hnsw_halfvec_support: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      hnsw_sparsevec_support: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      hnswhandler: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      ivfflat_bit_support: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      ivfflat_halfvec_support: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      ivfflathandler: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      l2_norm: {
-        Args: { "": unknown } | { "": unknown }
-        Returns: number
-      }
-      l2_normalize: {
-        Args: { "": string } | { "": unknown } | { "": unknown }
-        Returns: unknown
-      }
-      sparsevec_out: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      sparsevec_send: {
-        Args: { "": unknown }
-        Returns: string
-      }
-      sparsevec_typmod_in: {
-        Args: { "": unknown[] }
-        Returns: number
-      }
-      vector_avg: {
-        Args: { "": number[] }
-        Returns: string
-      }
-      vector_dims: {
-        Args: { "": string } | { "": unknown }
-        Returns: number
-      }
-      vector_norm: {
-        Args: { "": string }
-        Returns: number
-      }
-      vector_out: {
-        Args: { "": string }
-        Returns: unknown
-      }
-      vector_send: {
-        Args: { "": string }
-        Returns: string
-      }
-      vector_typmod_in: {
-        Args: { "": unknown[] }
-        Returns: number
-      }
+      [_ in never]: never
     }
     Enums: {
       [_ in never]: never

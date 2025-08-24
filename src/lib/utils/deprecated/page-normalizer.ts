@@ -1,5 +1,36 @@
 // src/lib/services/oncrawl/page-normalizer.ts
-import { OnCrawlPage, ProcessedOnCrawlPage, SyncMode } from '../types';
+// DEPRECATED: This file is no longer used with OnCrawl but contains useful 
+// page processing utilities that might be useful for our custom crawler implementation
+
+export enum SyncMode {
+  CONTENT = 'content',
+  FULL = 'full'
+}
+
+export interface OnCrawlPage {
+  url: string;
+  title: string;
+  h1: string;
+  meta_description: string;
+  word_count: string;
+  depth: string;
+  inrank_decimal: string;
+  internal_outlinks: string;
+  nb_inlinks: string;
+}
+
+export interface ProcessedOnCrawlPage {
+  url: string;
+  title: string;
+  h1: string;
+  metaDescription: string;
+  wordCount: number | null;
+  category: string;
+  depth: number | null;
+  inrankDecimal: number | null;
+  internalOutlinks: number | null;
+  nbInlinks: number | null;
+}
 
 /**
  * Convert string values to numbers (OnCrawl returns everything as strings)
