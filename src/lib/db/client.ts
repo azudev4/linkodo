@@ -1,57 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-if (!supabaseUrl || !supabaseAnonKey) {
+if (!supabaseUrl || !supabaseServiceKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-// Type definitions for our database tables
-export interface Page {
-  id: string;
-  url: string;
-  title: string | null;
-  meta_description: string | null;
-  h1: string | null;
-  h2_tags: string[] | null;
-  h3_tags: string[] | null;
-  primary_keywords: string[] | null;
-  semantic_keywords: string[] | null;
-  word_count: number | null;
-  embedding: number[] | null;
-  last_crawled: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CrawlJob {
-  id: string;
-  base_url: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  pages_crawled: number;
-  pages_total: number | null;
-  max_pages: number;
-  exclude_patterns: string[] | null;
-  started_at: string | null;
-  completed_at: string | null;
-  error_message: string | null;
-  created_at: string;
-}
-
-export interface SimilarPage {
-  id: string;
-  url: string;
-  title: string | null;
-  meta_description: string | null;
-  h1: string | null;
-  h2_tags: string[] | null;
-  h3_tags: string[] | null;
-  primary_keywords: string[] | null;
-  similarity: number;
-}
+// Import proper Supabase types
+import { Database } from '@/types/supabase';
+export type Tables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row'];
 
 // Helper function for similarity search
 export async function findSimilarPages(
@@ -69,39 +29,5 @@ export async function findSimilarPages(
     throw new Error(`Similarity search failed: ${error.message}`);
   }
 
-  return data as SimilarPage[];
-}
-
-export interface PageData {
-  id: number;
-  url: string;
-  title: string | null;
-  meta_description: string | null;
-  h1: string | null;
-  h2_tags: string[] | null;
-  h3_tags: string[] | null;
-  primary_keywords: string[] | null;
-  semantic_keywords: string[] | null;
-  word_count: number | null;
-  content_snippet: string | null;
-  embedding: number[] | null;
-  last_crawled: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface SuggestionData {
-  id: number;
-  url: string;
-  title: string | null;
-  h1: string | null;
-  h2_tags: string[] | null;
-  h3_tags: string[] | null;
-  primary_keywords: string[] | null;
-  content_snippet: string | null;
-  embedding: number[] | null;
-  word_count: number | null;
-  last_crawled: string | null;
-  created_at: string;
-  updated_at: string;
+  return data;
 }

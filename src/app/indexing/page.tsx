@@ -1,5 +1,5 @@
 // src/app/indexing/page.tsx
-import { IndexingManager } from "@/components/indexing/IndexingManager";
+import { IndexingManager } from "@/components/dashboard/indexing/IndexingManager";
 
 export default function IndexingPage() {
   return (
