@@ -46,7 +46,7 @@ export function ContentConnections({
 }) {
     const containerRef = useRef<HTMLDivElement>(null);
     const blogPostRef = useRef<HTMLDivElement>(null); // Single blog post (left)
-    const aiRef = useRef<HTMLDivElement>(null); // Linkodo AI (center)
+    const aiRef = useRef<HTMLDivElement>(null); // Unveil SEO AI (center)
     const page1Ref = useRef<HTMLDivElement>(null); // Homepage
     const page2Ref = useRef<HTMLDivElement>(null); // Documentation  
     const page3Ref = useRef<HTMLDivElement>(null); // Product pages
@@ -69,7 +69,7 @@ export function ContentConnections({
                     <div className="text-xs text-center mt-2 text-muted-foreground">Blog Post</div>
                 </div>
 
-                {/* Center - Linkodo AI */}
+                {/* Center - Unveil SEO AI */}
                 <div className="flex flex-col justify-center">
                     <Circle ref={aiRef} size="lg" className="border-blue-200 bg-blue-50">
                         <LinkIcon className="h-6 w-6 text-blue-600" />
@@ -94,7 +94,7 @@ export function ContentConnections({
                 </div>
             </div>
 
-            {/* AnimatedBeams - Blog Post to Linkodo AI */}
+            {/* AnimatedBeams - Blog Post to Unveil SEO AI */}
             <AnimatedBeam
                 containerRef={containerRef}
                 fromRef={blogPostRef}
@@ -104,7 +104,7 @@ export function ContentConnections({
                 gradientStopColor="#059669"
             />
 
-            {/* AnimatedBeams - Linkodo AI to Multiple Pages */}
+            {/* AnimatedBeams - Unveil SEO AI to Multiple Pages */}
             <AnimatedBeam
                 containerRef={containerRef}
                 fromRef={aiRef}

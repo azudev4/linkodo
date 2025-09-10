@@ -53,7 +53,7 @@ export function Footer() {
                   <Search className="w-4 h-4 text-white" />
                 </div>
                 <span className="text-xl font-semibold text-foreground">
-                  Linkodo
+                  Unveil SEO
                 </span>
               </div>
               <p className="text-muted-foreground text-sm leading-relaxed max-w-md">
@@ -92,7 +92,7 @@ export function Footer() {
         <div className="border-t border-border/50 py-6">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} Linkodo. All rights reserved.
+              © {new Date().getFullYear()} Unveil SEO. All rights reserved.
             </p>
             <div className="flex items-center gap-6">
               <Link

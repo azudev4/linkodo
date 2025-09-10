@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
-import { Mail, Sparkles, Clock, Shield, Zap, RotateCcw } from 'lucide-react';
+import { Mail, Sparkles, Shield, Zap, RotateCcw } from 'lucide-react';
 
 export function ContactCrawlSetup() {
   const handleContactUs = () => {

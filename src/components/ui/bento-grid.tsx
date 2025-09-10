@@ -1,15 +1,12 @@
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { ArrowRightIcon, LinkIcon, SearchIcon, BarChart3Icon, BrainCircuitIcon, UsersIcon } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { ArrowRightIcon, SearchIcon, BarChart3Icon, BrainCircuitIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { ReactNode, useState } from "react";
 import { motion } from "framer-motion";
 import { ContentConnections } from "../marketing/ContentConnections";
 
-export const LINKODO_CARDS = [
+export const UNVEILSEO_CARDS = [
     {
         Icon: SearchIcon,
         name: "Find Link Opportunities",
@@ -238,7 +235,7 @@ const BentoCard = ({
     name: string;
     className: string;
     background: ReactNode;
-    Icon: any;
+    Icon: React.ComponentType<{ className?: string }>;
     description: string;
     href: string;
     cta: string;

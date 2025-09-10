@@ -1,8 +1,7 @@
 "use client";
 
 import React from "react";
-import { ArrowRightIcon, LinkIcon, SparklesIcon } from "lucide-react";
-import Image from "next/image";
+import { ArrowRightIcon, LinkIcon } from "lucide-react";
 import Link from "next/link";
 import { motion, useInView } from "framer-motion";
 import { Button } from "@/components/ui/button";

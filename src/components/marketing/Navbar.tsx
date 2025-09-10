@@ -27,7 +27,7 @@ export function Navbar() {
                 <Search className="w-4 h-4 text-white" />
               </div>
               <span className="text-xl font-semibold text-foreground">
-                Linkodo
+                Unveil SEO
               </span>
             </Link>
           </div>
@@ -47,12 +47,12 @@ export function Navbar() {
 
           {/* CTA Buttons */}
           <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="hidden lg:block">
+            <Link href="/auth/login" className="hidden lg:block">
               <Button variant="outline" size="sm" className="transition-all duration-300 hover:scale-[1.02] hover:shadow-sm">
                 Sign In
               </Button>
             </Link>
-            <Link href="/dashboard" className="hidden lg:block">
+            <Link href="/auth/sign-up" className="hidden lg:block">
               <Button size="sm" className="bg-blue-600 hover:bg-blue-700 transition-all duration-300 hover:scale-[1.02] hover:shadow-md">
                 Get Started
               </Button>
@@ -92,12 +92,12 @@ export function Navbar() {
               </Link>
             ))}
             <div className="flex flex-col gap-3 px-4 pt-4">
-              <Link href="/dashboard" onClick={() => setIsOpen(false)}>
+              <Link href="/auth/login" onClick={() => setIsOpen(false)}>
                 <Button variant="outline" size="sm" className="w-full transition-all duration-300 hover:scale-[1.02] hover:shadow-sm">
                   Sign In
                 </Button>
               </Link>
-              <Link href="/dashboard" onClick={() => setIsOpen(false)}>
+              <Link href="/auth/sign-up" onClick={() => setIsOpen(false)}>
                 <Button size="sm" className="w-full bg-blue-600 hover:bg-blue-700 transition-all duration-300 hover:scale-[1.02] hover:shadow-md">
                   Get Started
                 </Button>

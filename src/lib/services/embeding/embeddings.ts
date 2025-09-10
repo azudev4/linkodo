@@ -219,8 +219,8 @@ export async function generateEmbeddingsOptimized(): Promise<{ processed: number
           if (updateError) throw updateError;
           return { success: true, shouldRetry: false };
           
-        } catch (error: any) {
-          if (error.status === 429) {
+        } catch (error: unknown) {
+          if (error && typeof error === 'object' && 'status' in error && error.status === 429) {
             console.log(`⏱️ Rate limit hit for page ${page.id}, will retry later`);
             return { success: false, shouldRetry: true };
           }

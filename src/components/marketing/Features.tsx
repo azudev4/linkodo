@@ -1,6 +1,6 @@
 'use client';
 
-import { BentoCard, BentoGrid, LINKODO_CARDS } from '@/components/ui/bento-grid';
+import { BentoCard, BentoGrid, UNVEILSEO_CARDS } from '@/components/ui/bento-grid';
 
 export function Features() {
   return (
@@ -19,14 +19,14 @@ export function Features() {
             </span>
           </h2>
           <p className="text-lg text-muted-foreground leading-relaxed">
-            Linkodo uses AI to automatically discover, suggest, and track internal linking opportunities across your content. 
+            Unveil SEO uses AI to automatically discover, suggest, and track internal linking opportunities across your content. 
             Boost your SEO and improve user experience effortlessly.
           </p>
         </div>
 
         {/* Bento Grid */}
         <BentoGrid className="py-8">
-          {LINKODO_CARDS.map((feature, idx) => (
+          {UNVEILSEO_CARDS.map((feature, idx) => (
             <BentoCard key={idx} {...feature} />
           ))}
         </BentoGrid>

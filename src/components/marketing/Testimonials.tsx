@@ -1,6 +1,5 @@
 import React from "react";
 import { Marquee } from "@/components/ui/marquee";
-import { cn } from "@/lib/utils";
 
 type Testimonial = {
     name: string;

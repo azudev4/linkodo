@@ -16,7 +16,7 @@ interface DatabasePage {
 interface DatabasePageWithId extends DatabasePage {
   id: string;
   similarity: number;
-  embedding?: any; // Raw embedding data from database
+  embedding?: number[]; // Raw embedding data from database
 }
 
 // Default configuration values

@@ -11,7 +11,7 @@ export function Header({ className }: HeaderProps) {
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
             <h1 className="text-lg font-medium text-gray-900">
-              Linkodo
+              Unveil SEO
             </h1>
           </div>
         </div>

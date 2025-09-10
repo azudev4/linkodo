@@ -522,7 +522,7 @@ export function TextAnalyzer() {
                 <FileText className="w-5 h-5 text-blue-600" />
               </div>
               <span className="text-xl font-semibold text-blue-600">
-                Linkodo AI
+                Unveil SEO AI
               </span>
             </div>
             <div className="flex items-center gap-3">
