@@ -30,7 +30,7 @@ export function ForgotPasswordForm({ className, ...props }: React.ComponentProps
     try {
       // The url which will be included in the email. This URL needs to be configured in your redirect URLs in the Supabase dashboard at https://supabase.com/dashboard/project/_/auth/url-configuration
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/update-password`,
+        redirectTo: `${window.location.origin}/update-password`,
       })
       if (error) throw error
       setSuccess(true)
@@ -79,14 +79,18 @@ export function ForgotPasswordForm({ className, ...props }: React.ComponentProps
                   />
                 </div>
                 {error && <p className="text-sm text-red-500">{error}</p>}
-                <Button type="submit" className="w-full" disabled={isLoading}>
+                <Button 
+                  type="submit" 
+                  className="w-full bg-blue-600 hover:bg-blue-700" 
+                  disabled={isLoading}
+                >
                   {isLoading ? 'Sending...' : 'Send reset email'}
                 </Button>
               </div>
-              <div className="mt-4 text-center text-sm">
-                Already have an account?{' '}
-                <Link href="/auth/login" className="underline underline-offset-4">
-                  Login
+              <div className="mt-4 text-center text-sm text-gray-600">
+                Remember your password?{' '}
+                <Link href="/login" className="text-blue-600 underline underline-offset-4 hover:text-blue-800">
+                  Sign in
                 </Link>
               </div>
             </form>

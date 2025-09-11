@@ -38,7 +38,7 @@ export function Navbar() {
               <Link
                 key={item.name}
                 href={item.href}
-                className="relative text-sm font-medium text-muted-foreground hover:text-gray-700 transition-colors duration-500 after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-gray-700 after:transition-all after:duration-500 after:ease-out hover:after:w-full"
+                className="relative text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors duration-500 after:absolute after:-bottom-1 after:left-0 after:h-0.5 after:w-0 after:bg-gray-900 after:transition-all after:duration-500 after:ease-out hover:after:w-full"
               >
                 {item.name}
               </Link>
@@ -47,12 +47,12 @@ export function Navbar() {
 
           {/* CTA Buttons */}
           <div className="flex items-center gap-4">
-            <Link href="/auth/login" className="hidden lg:block">
+            <Link href="/login" className="hidden lg:block">
               <Button variant="outline" size="sm" className="transition-all duration-300 hover:scale-[1.02] hover:shadow-sm">
                 Sign In
               </Button>
             </Link>
-            <Link href="/auth/sign-up" className="hidden lg:block">
+            <Link href="/signup" className="hidden lg:block">
               <Button size="sm" className="bg-blue-600 hover:bg-blue-700 transition-all duration-300 hover:scale-[1.02] hover:shadow-md">
                 Get Started
               </Button>
@@ -92,12 +92,12 @@ export function Navbar() {
               </Link>
             ))}
             <div className="flex flex-col gap-3 px-4 pt-4">
-              <Link href="/auth/login" onClick={() => setIsOpen(false)}>
+              <Link href="/login" onClick={() => setIsOpen(false)}>
                 <Button variant="outline" size="sm" className="w-full transition-all duration-300 hover:scale-[1.02] hover:shadow-sm">
                   Sign In
                 </Button>
               </Link>
-              <Link href="/auth/sign-up" onClick={() => setIsOpen(false)}>
+              <Link href="/signup" onClick={() => setIsOpen(false)}>
                 <Button size="sm" className="w-full bg-blue-600 hover:bg-blue-700 transition-all duration-300 hover:scale-[1.02] hover:shadow-md">
                   Get Started
                 </Button>
