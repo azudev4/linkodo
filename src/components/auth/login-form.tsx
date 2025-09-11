@@ -1,7 +1,6 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import { createClient } from '@/lib/client'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -22,25 +21,79 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [showResendConfirmation, setShowResendConfirmation] = useState(false)
+  const [resendLoading, setResendLoading] = useState(false)
+  const [resendSuccess, setResendSuccess] = useState(false)
   const router = useRouter()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    const supabase = createClient()
     setIsLoading(true)
     setError(null)
+    setShowResendConfirmation(false)
+    setResendSuccess(false)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password
+        })
       })
-      if (error) throw error
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        const errorMessage = result.error || 'Login failed'
+        // Check if error is about email confirmation
+        if (errorMessage.includes('Email not confirmed') || errorMessage.includes('confirm')) {
+          setShowResendConfirmation(true)
+        }
+        throw new Error(errorMessage)
+      }
+
       router.push('/dashboard')
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'An error occurred')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleResendConfirmation = async () => {
+    if (!email) {
+      setError('Please enter your email address first')
+      return
+    }
+
+    setResendLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch('/api/auth/resend-confirmation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email })
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to resend confirmation')
+      }
+
+      setResendSuccess(true)
+      setShowResendConfirmation(false)
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'Failed to resend confirmation')
+    } finally {
+      setResendLoading(false)
     }
   }
 
@@ -83,7 +136,27 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
+              {resendSuccess ? (
+                <p className="text-sm text-green-600">
+                  Confirmation email sent! Please check your inbox.
+                </p>
+              ) : showResendConfirmation ? (
+                <div className="text-sm text-orange-600">
+                  <p>Your email needs to be confirmed.</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleResendConfirmation}
+                    disabled={resendLoading}
+                    className="mt-2"
+                  >
+                    {resendLoading ? 'Sending...' : 'Resend confirmation email'}
+                  </Button>
+                </div>
+              ) : error ? (
+                <p className="text-sm text-red-500">{error}</p>
+              ) : null}
               <Button 
                 type="submit" 
                 className="w-full bg-blue-600 hover:bg-blue-700" 

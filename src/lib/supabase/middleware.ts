@@ -2,6 +2,8 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateUserSession(request: NextRequest) {
+  console.log('🚀 MIDDLEWARE STARTED - Path:', request.nextUrl.pathname)
+  
   let supabaseResponse = NextResponse.next({
     request,
   })
@@ -38,6 +40,22 @@ export async function updateUserSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims()
   const user = data?.claims
 
+  console.log('Middleware - Path:', request.nextUrl.pathname)
+  console.log('Middleware - User:', user ? 'Authenticated' : 'Not authenticated')
+
+  // Auth routes that authenticated users shouldn't access
+  const authRoutes = ['/login', '/signup', '/forgot-password', '/signup-success']
+  const isAuthRoute = authRoutes.some(route => request.nextUrl.pathname.startsWith(route))
+
+  // If user is authenticated and trying to access auth routes, redirect to dashboard
+  if (user && isAuthRoute) {
+    console.log('Middleware - Authenticated user accessing auth route, redirecting to dashboard')
+    const url = request.nextUrl.clone()
+    url.pathname = '/dashboard'
+    return NextResponse.redirect(url)
+  }
+
+  // If user is not authenticated and trying to access protected routes, redirect to login
   if (
     !user &&
     request.nextUrl.pathname !== '/' &&
@@ -49,11 +67,13 @@ export async function updateUserSession(request: NextRequest) {
     !request.nextUrl.pathname.startsWith('/error') &&
     !request.nextUrl.pathname.startsWith('/signup-success')
   ) {
-    // no user, potentially respond by redirecting the user to the login page
+    console.log('Middleware - Unauthenticated user accessing protected route, redirecting to login')
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
+
+  console.log('Middleware - Allowing access')
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.
   // If you're creating a new response object with NextResponse.next() make sure to:

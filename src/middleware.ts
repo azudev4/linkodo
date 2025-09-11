@@ -1,7 +1,8 @@
 import { type NextRequest } from 'next/server'
-import { updateUserSession } from '@/lib/middleware'
+import { updateUserSession } from '@/lib/supabase/middleware'
 
 export async function middleware(request: NextRequest) {
+  console.log('ROOT MIDDLEWARE CALLED:', request.nextUrl.pathname)
   return await updateUserSession(request)
 }
 
@@ -14,6 +15,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * - images - .svg, .png, .jpg, .jpeg, .gif, .webp
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
