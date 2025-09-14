@@ -1,33 +1,10 @@
-import { createServiceRoleClient } from '@/lib/supabase/server'
-import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
+import { withAuth } from '@/lib/auth/withAuth'
 
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request, { user, serviceSupabase }) => {
   try {
-    const cookieStore = await cookies()
-    const accessToken = cookieStore.get('sb-access-token')
-    
-    if (!accessToken) {
-      return NextResponse.json(
-        { error: 'Not authenticated' },
-        { status: 401 }
-      )
-    }
-
-    const supabase = createServiceRoleClient()
-    
-    // Verify the token and get user
-    const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken.value)
-    
-    if (userError || !user) {
-      return NextResponse.json(
-        { error: 'Invalid token' },
-        { status: 401 }
-      )
-    }
-
     // Get user profile from profiles table
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await serviceSupabase
       .from('profiles')
       .select('*')
       .eq('id', user.id)
@@ -51,4 +28,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
-}
+})

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
+import AuthErrorHandler from '@/components/auth/AuthErrorHandler'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -34,6 +35,7 @@ export default function RootLayout({
         className={`${inter.className} antialiased min-h-screen text-gray-900`}
         suppressHydrationWarning
       >
+        <AuthErrorHandler />
         {children}
       </body>
     </html>

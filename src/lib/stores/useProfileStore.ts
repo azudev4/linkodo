@@ -29,8 +29,8 @@ export interface ProfileState extends ErrorState {
   isStale: () => boolean;
 }
 
-// Cache TTL - 15 minutes
-const CACHE_TTL = 15 * 60 * 1000;
+// Cache TTL - 5 minutes
+const CACHE_TTL = 5 * 60 * 1000;
 
 // Global state to prevent multiple simultaneous requests
 let isCurrentlyFetching = false;
@@ -66,13 +66,13 @@ export const useProfileStore = createPersistedStore<ProfileState>(
             credentials: 'include' 
           });
           
-          // If not authenticated, clear profile
+          // If not authenticated, clear profile but don't cache (so it retries)
           if (response.status === 401 || response.status === 403) {
             set(state => ({
               ...state,
               profile: null,
               isLoading: false,
-              lastFetch: Date.now(),
+              lastFetch: 0, // Don't cache auth failures - keep retrying
               error: null
             }));
             return;

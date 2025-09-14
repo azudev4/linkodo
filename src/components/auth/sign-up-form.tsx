@@ -59,11 +59,11 @@ export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutR
 
       console.log('Signup successful, redirecting...')
       router.push('/signup-success')
+      // Don't set loading to false - keep button in loading state during redirect
     } catch (error: unknown) {
       console.error('Caught error:', error)
       setError(error instanceof Error ? error.message : 'An error occurred')
-    } finally {
-      setIsLoading(false)
+      setIsLoading(false) // Only stop loading on error
     }
   }
 

@@ -1,4 +1,4 @@
-import { createServiceRoleClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
@@ -12,16 +12,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Use service role client for admin operations
-    const supabase = createServiceRoleClient()
+    // Use regular client for signup to ensure proper email confirmation flow
+    const supabase = await createClient()
     
-    // Create auth user
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+    // Create auth user with email confirmation
+    const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
-      email_confirm: false, // Set to true if you want to skip email confirmation
-      user_metadata: {
-        full_name: fullName
+      options: {
+        data: {
+          full_name: fullName
+        },
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/auth/confirm`
       }
     })
 
@@ -33,32 +35,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create profile
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .insert({
-        id: authData.user.id,
-        email: email,
-        full_name: fullName || null,
-        role: 'default'
-      })
-      .select()
-      .single()
-
-    if (profileError) {
-      console.error('Profile creation error:', profileError)
-      // Clean up auth user if profile creation fails
-      await supabase.auth.admin.deleteUser(authData.user.id)
-      return NextResponse.json(
-        { error: 'Failed to create user profile' },
-        { status: 500 }
-      )
-    }
-
+    // Note: Profile will be created via database trigger when user confirms email
     return NextResponse.json({ 
       success: true, 
-      user: authData.user,
-      profile: profileData 
+      message: 'Please check your email to confirm your account',
+      user: authData.user
     })
   } catch (error) {
     console.error('Signup API error:', error)

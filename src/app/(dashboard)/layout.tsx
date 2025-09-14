@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "../globals.css";
 import { AppShell } from "@/components/dashboard/layout/AppShell";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -18,11 +17,9 @@ export default function DashboardLayout({
 }) {
   return (
     <div className="min-h-screen bg-gray-50">
-      <ProtectedRoute requiredRoles={['early_access', 'admin']}>
-        <AppShell>
-          {children}
-        </AppShell>
-      </ProtectedRoute>
+      <AppShell>
+        {children}
+      </AppShell>
     </div>
   );
 } 

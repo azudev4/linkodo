@@ -1,6 +1,30 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Fix Chrome autofill ugly yellow background */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px #fef3c7 inset !important;
+  -webkit-text-fill-color: #1f2937 !important;
+}
+
+/* Text selection in autofilled inputs */
+input:-webkit-autofill::selection {
+  background-color: #3b82f6 !important;
+  color: white !important;
+}
+
+/* Dark mode autofill fix */
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus,
+.dark input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px hsl(var(--background)) inset !important;
+  -webkit-text-fill-color: hsl(var(--foreground)) !important;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
