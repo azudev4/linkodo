@@ -19,7 +19,7 @@ export async function GET() {
       if (!pagesError) {
         totalPagesCount = count || 0;
       }
-    } catch (error) {
+    } catch {
       console.log('Pages table not found or accessible');
     }
 
@@ -33,7 +33,7 @@ export async function GET() {
       if (!embeddingsError) {
         embeddingsCount = count || 0;
       }
-    } catch (error) {
+    } catch {
       console.log('Embeddings column not found or accessible');
     }
 
@@ -48,7 +48,7 @@ export async function GET() {
       if (recentSyncs && recentSyncs.length > 0) {
         lastSync = recentSyncs[0].synced_at;
       }
-    } catch (error) {
+    } catch {
       console.log('Sync history table not found or accessible');
     }
 

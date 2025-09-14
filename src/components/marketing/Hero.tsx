@@ -159,10 +159,11 @@ const Hero = () => {
                     <div className="absolute inset-0 -top-20 bg-white opacity-55 blur-2xl scale-x-115 scale-y-135 z-1"></div>
                     <div className="absolute inset-0 -top-10 bg-white opacity-75 blur-xl scale-x-105 scale-y-120 z-1"></div>
                     <h1 className="text-4xl md:text-5xl lg:text-7xl font-bold !leading-tight max-w-5xl mx-auto relative z-10">
-                        Transform your content with{" "}
+                        Unveil the{" "}
                         <span className="bg-gradient-to-r from-blue-600 to-blue-800 text-transparent bg-clip-text">
-                            intelligent linking
+                            hidden potential
                         </span>
+                        {" "}of your website
                     </h1>
                 </AnimationContainer>
 
@@ -174,8 +175,7 @@ const Hero = () => {
                         <div className="absolute inset-0 bg-white opacity-50 blur-2xl scale-125 z-1"></div>
                         <div className="absolute inset-0 bg-white opacity-70 blur-xl scale-110 z-1"></div>
                         <p className="max-w-2xl mx-auto mt-4 text-lg lg:text-xl text-center text-gray-600 relative z-10">
-                            Automatically discover and create meaningful connections between your content. 
-                            Boost SEO, improve user experience, and strengthen your content ecosystem.
+                            Boost SEO and guide visitors effortlessly with AI-powered internal linking suggestions tailored to your site&apos;s unique pages.
                         </p>
                     </div>
                 </AnimationContainer>
@@ -211,20 +211,21 @@ const Hero = () => {
                         <div className="absolute top-1/4 left-1/2 -z-10 bg-gradient-to-r from-blue-400 to-blue-600 w-3/4 lg:w-4/5 -translate-x-1/2 h-1/3 -translate-y-1/2 inset-0 blur-[4rem] lg:blur-[8rem] animate-pulse"></div>
                         <div className="hidden lg:block absolute -top-1/8 left-1/2 -z-20 bg-blue-500 w-1/3 -translate-x-1/2 h-1/4 -translate-y-1/2 inset-0 blur-[8rem] animate-pulse"></div>
 
-                        <div className="rounded-lg lg:rounded-[22px] border border-blue-100 bg-white shadow-2xl overflow-hidden">
-                            {/* Placeholder for dashboard image - you'll need to add your actual dashboard image */}
-                            <div className="w-full aspect-[16/9] bg-gradient-to-br from-blue-50 to-white flex items-center justify-center">
-                                <div className="text-center space-y-4">
-                                    <LinkIcon className="size-16 text-blue-600 mx-auto" />
-                                    <p className="text-xl text-blue-700 font-semibold">Dashboard Preview Coming Soon</p>
-                                    <p className="text-gray-600">Your intelligent linking workspace</p>
-                                </div>
+                        <div className="border border-blue-100 bg-white shadow-2xl overflow-hidden" style={{borderRadius: '22px'}}>
+                            <div className="w-full aspect-[16/9] relative">
+                                <iframe
+                                    className="absolute inset-0 w-[102%] h-[102%] -left-[1%] -top-[1%] border-0"
+                                    src="https://www.youtube.com/embed/1K0X1pecCBI?rel=0&modestbranding=1&iv_load_policy=3"
+                                    title="Linkodo Demo"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                    allowFullScreen
+                                />
                             </div>
                         </div>
                     </div>
                     
                     {/* Bottom Fade */}
-                    <div className="bg-gradient-to-t from-white to-transparent absolute bottom-0 inset-x-0 w-full h-1/3 pointer-events-none"></div>
+                    <div className="bg-gradient-to-t from-white to-transparent absolute bottom-0 inset-x-0 w-full h-1/3 pointer-events-none" style={{borderRadius: '0 0 22px 22px'}}></div>
                 </AnimationContainer>
             </div>
         </div>

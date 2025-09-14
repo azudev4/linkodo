@@ -1,6 +1,6 @@
 // src/lib/services/oncrawl/processing/database-sync.ts - OPTIMIZED VERSION
-import { supabase } from '@/lib/db/client';
-import { ProcessedOnCrawlPage, FilterStats, DatabasePage, SyncMode } from '../types';
+import { createServiceRoleClient } from '@/lib/supabase/server';
+import { ProcessedOnCrawlPage, FilterStats, DatabasePage, SyncMode } from './types';
 import { hasPageChanged } from './page-normalizer';
 
 /**
@@ -9,7 +9,9 @@ import { hasPageChanged } from './page-normalizer';
 export async function fetchExistingPagesOptimized(projectName: string): Promise<Map<string, DatabasePage>> {
   console.log(`🔍 Fetching existing pages for project "${projectName}" for change detection...`);
   const startTime = Date.now();
-  
+
+  const supabase = createServiceRoleClient();
+
   const { count, error: countError } = await supabase
     .from('pages')
     .select('*', { count: 'exact', head: true })
@@ -110,7 +112,9 @@ export async function directInsertNewPages(
   batchSize: number = 500
 ): Promise<{ inserted: number; failed: number }> {
   if (pages.length === 0) return { inserted: 0, failed: 0 };
-  
+
+  const supabase = createServiceRoleClient();
+
   console.log(`📥 Direct inserting ${pages.length} new pages for project "${projectName}"...`);
   let inserted = 0;
   let failed = 0;
@@ -166,7 +170,9 @@ export async function directUpdateChangedPages(
   batchSize: number = 200
 ): Promise<{ updated: number; failed: number }> {
   if (pages.length === 0) return { updated: 0, failed: 0 };
-  
+
+  const supabase = createServiceRoleClient();
+
   console.log(`🔄 Direct updating ${pages.length} changed pages for project "${projectName}"...`);
   let updated = 0;
   let failed = 0;
@@ -234,7 +240,9 @@ export async function directDeleteStalePages(
   batchSize: number = 500
 ): Promise<{ deleted: number; failed: number }> {
   if (staleUrls.length === 0) return { deleted: 0, failed: 0 };
-  
+
+  const supabase = createServiceRoleClient();
+
   console.log(`🗑️  Direct deleting ${staleUrls.length} stale pages for project "${projectName}"...`);
   let deleted = 0;
   let failed = 0;
@@ -327,7 +335,9 @@ export async function optimizedSmartSync(
 export async function fetchExistingUrlsOnly(projectName: string): Promise<Set<string>> {
   console.log(`⚡ Fetching existing URLs only (no content) for project "${projectName}"...`);
   const startTime = Date.now();
-  
+
+  const supabase = createServiceRoleClient();
+
   const { count, error: countError } = await supabase
     .from('pages')
     .select('*', { count: 'exact', head: true })

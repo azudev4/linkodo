@@ -1,6 +1,6 @@
 // src/app/api/diagnose-embeddings/route.ts
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/db/client';
+import { createServiceRoleClient } from '@/lib/supabase/server';
 
 interface PageDiagnostic {
   id: string;
@@ -18,7 +18,9 @@ interface PageDiagnostic {
 export async function GET() {
   try {
     console.log('🔍 Diagnosing remaining pages without embeddings...');
-    
+
+    const supabase = createServiceRoleClient();
+
     // Get ALL pages without embeddings
     const { data: pages, error } = await supabase
       .from('pages')

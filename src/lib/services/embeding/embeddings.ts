@@ -1,6 +1,6 @@
 // src/lib/services/embeding/embeddings.ts - PRECISE FIXES
 import OpenAI from 'openai';
-import { supabase } from '@/lib/db/client';
+import { createServiceRoleClient } from '@/lib/supabase/server';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
@@ -68,7 +68,9 @@ function hasEmbeddableContent(page: { title: string | null; h1: string | null; m
  */
 async function markUnembeddablePages(): Promise<number> {
   console.log('🔍 Identifying and marking pages with no embeddable content...');
-  
+
+  const supabase = createServiceRoleClient();
+
   // Find pages with no content that keep getting processed
   const { data: emptyPages, error } = await supabase
     .from('pages')
@@ -114,7 +116,9 @@ async function markUnembeddablePages(): Promise<number> {
  */
 export async function generateEmbeddingsOptimized(): Promise<{ processed: number; failed: number; skipped: number }> {
   console.log('🚀 Starting FIXED embedding generation with cursor pagination...');
-  
+
+  const supabase = createServiceRoleClient();
+
   // First, mark unembeddable pages so they don't get processed
   const skippedCount = await markUnembeddablePages();
   
@@ -225,7 +229,7 @@ export async function generateEmbeddingsOptimized(): Promise<{ processed: number
             return { success: false, shouldRetry: true };
           }
           
-          console.error(`❌ Failed to process page ${page.id}:`, error.message);
+          console.error(`❌ Failed to process page ${page.id}:`, error instanceof Error ? error.message : String(error));
           return { success: false, shouldRetry: false };
         }
       }));
@@ -288,6 +292,8 @@ export async function checkUnembeddablePages(): Promise<{
   unembeddable: number;
   examples: Array<{ id: string; title: string | null; h1: string | null; meta_description: string | null }>;
 }> {
+  const supabase = createServiceRoleClient();
+
   const { data: pages, error } = await supabase
     .from('pages')
     .select('id, title, h1, meta_description')

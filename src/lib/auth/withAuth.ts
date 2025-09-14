@@ -4,12 +4,12 @@ import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 export interface AuthenticatedUser {
   id: string
   email?: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 export interface AuthContext {
   user: AuthenticatedUser
-  supabase: ReturnType<typeof createClient>
+  supabase: Awaited<ReturnType<typeof createClient>>
   serviceSupabase: ReturnType<typeof createServiceRoleClient>
 }
 

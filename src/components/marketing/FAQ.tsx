@@ -1,5 +1,39 @@
+"use client";
+
 import React from "react";
+import { motion, useInView } from "framer-motion";
+import { cn } from "@/lib/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+
+interface AnimationContainerProps {
+    children: React.ReactNode;
+    className?: string;
+    delay?: number;
+}
+
+const AnimationContainer = ({ children, className, delay = 0.1 }: AnimationContainerProps) => {
+    const ref = React.useRef(null);
+    const isInView = useInView(ref, { once: true });
+
+    return (
+        <motion.div
+            ref={ref}
+            className={cn("w-full h-full", className)}
+            initial={{ opacity: 0, y: 30, scale: 0.95 }}
+            animate={isInView ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 30, scale: 0.95 }}
+            transition={{
+                delay: delay,
+                duration: 0.6,
+                type: "spring",
+                stiffness: 80,
+                damping: 12,
+                ease: [0.25, 0.46, 0.45, 0.94]
+            }}
+        >
+            {children}
+        </motion.div>
+    );
+};
 
 const FAQS = [
     {
@@ -28,7 +62,7 @@ const FAQ = () => {
     return (
         <div className="py-20 lg:py-32">
             <div className="max-w-7xl mx-auto px-4">
-                <div className="flex flex-col items-center text-center gap-4 mb-12">
+                <AnimationContainer className="flex flex-col items-center text-center gap-4 mb-12">
                     <h2 className="text-2xl md:text-4xl lg:text-5xl font-bold !leading-tight">
                         Still have{" "}
                         <span className="bg-gradient-to-r from-blue-600 to-blue-800 text-transparent bg-clip-text">
@@ -38,9 +72,9 @@ const FAQ = () => {
                     <p className="text-sm md:text-base lg:text-lg text-muted-foreground max-w-2xl mx-auto">
                         Find answers to common questions about intelligent internal linking
                     </p>
-                </div>
+                </AnimationContainer>
 
-                <div className="max-w-3xl mx-auto">
+                <AnimationContainer delay={0.15} className="max-w-3xl mx-auto">
                     <Accordion type="single" collapsible className="w-full space-y-4">
                         {FAQS.map((faq, index) => (
                             <AccordionItem
@@ -57,7 +91,7 @@ const FAQ = () => {
                             </AccordionItem>
                         ))}
                     </Accordion>
-                </div>
+                </AnimationContainer>
             </div>
         </div>
     );

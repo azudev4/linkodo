@@ -1,5 +1,5 @@
 // src/lib/services/embeding/embedding-matcher.ts - ENHANCED WITH DEBUG LOGS AND WEIGHTED EMBEDDINGS
-import { supabase } from '@/lib/db/client';
+import { createServiceRoleClient } from '@/lib/supabase/server';
 import { generateEmbedding, embeddingFromString } from './embeddings';
 // DEPRECATED: Removed OnCrawl dependency
 // import { DatabasePage } from '@/lib/services/oncrawl/types';
@@ -125,6 +125,7 @@ async function findSimilarPagesEnhanced(
       // Increase timeout based on database size - 30 seconds for large datasets
       const timeoutMs = 30000;
       
+      const supabase = createServiceRoleClient();
       const searchPromise = supabase.rpc('find_similar_pages', {
         query_embedding: embeddingStr,
         similarity_threshold: Math.max(0.5, minSimilarity - 0.2),
@@ -173,9 +174,9 @@ async function findSimilarPagesEnhanced(
       const pages: PageWithEmbedding[] = filteredResults.slice(0, maxResults).map((row: DatabasePageWithId) => ({
         id: row.id,
         url: row.url,
-        title: row.title,
-        meta_description: row.meta_description,
-        h1: row.h1,
+        title: row.title ?? null,
+        meta_description: row.meta_description ?? null,
+        h1: row.h1 ?? null,
         embedding: Array.isArray(row.embedding) ? JSON.stringify(row.embedding) : '[]',
         similarity: row.similarity
       }));
@@ -480,6 +481,8 @@ export async function checkEmbeddingCompatibility(): Promise<{
   console.log('🔍 Running enhanced embedding compatibility check for weighted embeddings...');
   
   try {
+    const supabase = createServiceRoleClient();
+
     // Check total pages
     const { count: totalPages, error: countError } = await supabase
       .from('pages')

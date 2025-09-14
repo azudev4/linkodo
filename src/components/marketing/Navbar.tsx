@@ -2,15 +2,15 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { Link as ScrollLink } from 'react-scroll';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Menu, X, Search } from 'lucide-react';
 
 const navigation = [
-  { name: 'Features', href: '#features' },
-  { name: 'Pricing', href: '#pricing' },
-  { name: 'About', href: '#about' },
-  { name: 'Contact', href: '#contact' },
+  { name: 'Features', to: 'features' },
+  { name: 'Pricing', to: 'pricing' },
+  { name: 'FAQ', to: 'faq' },
 ];
 
 export function Navbar() {
@@ -35,13 +35,16 @@ export function Navbar() {
           {/* Desktop Navigation */}
           <nav className="hidden lg:flex items-center gap-8">
             {navigation.map((item) => (
-              <Link
+              <ScrollLink
                 key={item.name}
-                href={item.href}
-                className="relative text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors duration-500 after:absolute after:-bottom-1 after:left-0 after:h-0.5 after:w-0 after:bg-gray-900 after:transition-all after:duration-500 after:ease-out hover:after:w-full"
+                to={item.to}
+                smooth={true}
+                duration={500}
+                offset={-80}
+                className="relative text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors duration-500 after:absolute after:-bottom-1 after:left-0 after:h-0.5 after:w-0 after:bg-gray-900 after:transition-all after:duration-500 after:ease-out hover:after:w-full cursor-pointer"
               >
                 {item.name}
-              </Link>
+              </ScrollLink>
             ))}
           </nav>
 
@@ -82,14 +85,17 @@ export function Navbar() {
         >
           <div className="py-4 space-y-4 border-t border-border/50">
             {navigation.map((item) => (
-              <Link
+              <ScrollLink
                 key={item.name}
-                href={item.href}
-                className="block px-4 py-2 text-sm font-medium text-muted-foreground hover:text-gray-700 hover:bg-muted rounded-md transition-colors"
+                to={item.to}
+                smooth={true}
+                duration={500}
+                offset={-80}
+                className="block px-4 py-2 text-sm font-medium text-muted-foreground hover:text-gray-700 hover:bg-muted rounded-md transition-colors cursor-pointer"
                 onClick={() => setIsOpen(false)}
               >
                 {item.name}
-              </Link>
+              </ScrollLink>
             ))}
             <div className="flex flex-col gap-3 px-4 pt-4">
               <Link href="/login" onClick={() => setIsOpen(false)}>

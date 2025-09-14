@@ -1,13 +1,14 @@
-import { supabase } from '@/lib/db/client';
+import { createServiceRoleClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 const BATCH_SIZE = 1000;
 
 export async function POST() {
   try {
+    const supabase = createServiceRoleClient();
     let totalReset = 0;
     let hasMore = true;
-    
+
     while (hasMore) {
       // Get next batch of pages with embeddings
       const { data: pages, error: fetchError } = await supabase
