@@ -1,5 +1,5 @@
 // Minimal types for deprecated sync functionality
-export { ProcessedOnCrawlPage } from './page-normalizer';
+export type { ProcessedOnCrawlPage } from './page-normalizer';
 
 export interface DatabasePage {
   id: string;
@@ -24,6 +24,7 @@ export interface FilterStats {
   filteredDuplicates: number;
   filteredUrlPatterns: number;
   filteredForumContent: number;
+  filteredNoContent: number;
 }
 
 export enum SyncMode {
