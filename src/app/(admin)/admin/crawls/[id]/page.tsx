@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CrawlSessionDetailsShell } from "@/components/admin/crawls/CrawlSessionDetailsShell";
+import { CrawlSessionDetailsShell } from "@/components/admin/crawls/details/CrawlSessionDetailsShell";
 
 export const metadata: Metadata = {
   title: "Crawl Session Details - Admin Dashboard",
@@ -7,9 +7,10 @@ export const metadata: Metadata = {
 };
 
 interface CrawlSessionDetailsPageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
-export default function CrawlSessionDetailsPage({ params }: CrawlSessionDetailsPageProps) {
-  return <CrawlSessionDetailsShell sessionId={params.id} />;
+export default async function CrawlSessionDetailsPage({ params }: CrawlSessionDetailsPageProps) {
+  const { id } = await params;
+  return <CrawlSessionDetailsShell sessionId={id} />;
 }

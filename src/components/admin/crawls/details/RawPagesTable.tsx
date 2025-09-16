@@ -65,7 +65,7 @@ interface RawPagesTableProps {
 
 export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, loading = false }: RawPagesTableProps) {
   const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
-  const [showExcluded, setShowExcluded] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'included' | 'excluded'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [sortBy, setSortBy] = useState<'url' | 'title' | 'status_code' | 'crawled_at'>('crawled_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -73,14 +73,19 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, load
   const topScrollRef = React.useRef<HTMLDivElement>(null);
   const tableScrollRef = React.useRef<HTMLDivElement>(null);
   const [tableScrollWidth, setTableScrollWidth] = React.useState(2000);
+  const [isDragging, setIsDragging] = React.useState(false);
+  const [dragStart, setDragStart] = React.useState({ x: 0, scrollLeft: 0 });
 
   // Filter and sort pages
   const filteredPages = useMemo(() => {
     let filtered = pages;
 
-    if (!showExcluded) {
+    if (statusFilter === 'included') {
       filtered = filtered.filter(page => !page.excluded);
+    } else if (statusFilter === 'excluded') {
+      filtered = filtered.filter(page => page.excluded);
     }
+    // 'all' shows everything, no filtering needed
 
     // Sort pages
     filtered.sort((a, b) => {
@@ -102,7 +107,7 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, load
     });
 
     return filtered;
-  }, [pages, showExcluded, sortBy, sortDirection]);
+  }, [pages, statusFilter, sortBy, sortDirection]);
 
   // Pagination
   const totalPages = Math.ceil(filteredPages.length / itemsPerPage);
@@ -223,6 +228,57 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, load
     }
   }, [paginatedPages.length]);
 
+  // Drag to scroll functionality
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!tableScrollRef.current) return;
+
+    setIsDragging(true);
+    setDragStart({
+      x: e.pageX,
+      scrollLeft: tableScrollRef.current.scrollLeft
+    });
+
+    // Add grabbing cursor
+    document.body.style.cursor = 'grabbing';
+    document.body.style.userSelect = 'none';
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !tableScrollRef.current) return;
+
+    e.preventDefault();
+    const x = e.pageX;
+    const walk = (x - dragStart.x) * 1.5; // Adjust scroll speed
+    const newScrollLeft = dragStart.scrollLeft - walk;
+
+    tableScrollRef.current.scrollLeft = newScrollLeft;
+
+    // Sync with top scroller
+    if (topScrollRef.current) {
+      topScrollRef.current.scrollLeft = newScrollLeft;
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    document.body.style.cursor = 'default';
+    document.body.style.userSelect = 'auto';
+  };
+
+  const handleMouseLeave = () => {
+    if (isDragging) {
+      setIsDragging(false);
+      document.body.style.cursor = 'default';
+      document.body.style.userSelect = 'auto';
+    }
+  };
+
+  // Add global mouse up listener
+  React.useEffect(() => {
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => document.removeEventListener('mouseup', handleMouseUp);
+  }, []);
+
   return (
     <div className="space-y-4">
       {/* Table Header */}
@@ -236,31 +292,49 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, load
               </p>
             </div>
 
-            <div className="flex items-center space-x-3">
-              <div className="text-sm text-gray-600">
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 mr-2">
-                  <CheckCircle className="w-3 h-3 mr-1" />
-                  {includedCount} included
-                </span>
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                  <XCircle className="w-3 h-3 mr-1" />
-                  {excludedCount} excluded
-                </span>
-              </div>
-
+            <div className="flex items-center space-x-2">
               <Button
-                variant="outline"
+                variant={statusFilter === 'all' ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setShowExcluded(!showExcluded)}
+                onClick={() => setStatusFilter('all')}
                 className={cn(
                   "border-gray-200",
-                  showExcluded
-                    ? "bg-gray-100 text-gray-700"
-                    : "bg-white text-gray-600"
+                  statusFilter === 'all'
+                    ? "bg-blue-600 text-white hover:bg-blue-700"
+                    : "bg-white text-gray-700 hover:bg-gray-50"
                 )}
               >
-                {showExcluded ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
-                {showExcluded ? 'Hide' : 'Show'} Excluded
+                {pages.length} All
+              </Button>
+
+              <Button
+                variant={statusFilter === 'included' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setStatusFilter('included')}
+                className={cn(
+                  "border-green-200",
+                  statusFilter === 'included'
+                    ? "bg-green-600 text-white hover:bg-green-700"
+                    : "bg-green-50 text-green-700 hover:bg-green-100"
+                )}
+              >
+                <CheckCircle className="w-3 h-3 mr-1" />
+                {includedCount} Included
+              </Button>
+
+              <Button
+                variant={statusFilter === 'excluded' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setStatusFilter('excluded')}
+                className={cn(
+                  "border-red-200",
+                  statusFilter === 'excluded'
+                    ? "bg-red-600 text-white hover:bg-red-700"
+                    : "bg-red-50 text-red-700 hover:bg-red-100"
+                )}
+              >
+                <XCircle className="w-3 h-3 mr-1" />
+                {excludedCount} Excluded
               </Button>
             </div>
           </div>
@@ -325,8 +399,12 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, load
         {/* Table */}
         <div
           ref={tableScrollRef}
-          className="overflow-x-auto"
+          className={`overflow-x-auto ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
           onScroll={handleTableScroll}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+          style={{ userSelect: isDragging ? 'none' : 'auto' }}
         >
           <table className="w-full">
             <thead className="bg-gray-50">
@@ -570,12 +648,15 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, load
               <FileText className="w-10 h-10 text-gray-400" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-3">
-              {showExcluded ? 'No pages found' : 'No included pages'}
+              {statusFilter === 'all' ? 'No pages found' :
+               statusFilter === 'included' ? 'No included pages' : 'No excluded pages'}
             </h3>
             <p className="text-gray-500 mb-6 max-w-md mx-auto">
-              {showExcluded
+              {statusFilter === 'all'
                 ? 'No pages match the current filter criteria. Try adjusting your filters or start a new crawl.'
-                : 'All pages are currently excluded. Adjust your filters to include relevant pages.'
+                : statusFilter === 'included'
+                ? 'No pages are currently included. Use the filter controls to include relevant pages.'
+                : 'No pages are currently excluded. All pages are included in this session.'
               }
             </p>
           </div>
