@@ -12,7 +12,8 @@
 'use client';
 
 import React from 'react';
-import { Plus, ChevronDown } from 'lucide-react';
+import { Plus, ChevronDown, Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -28,8 +29,10 @@ export function FilterBuilderForm({
   filterBuilder,
   onFilterBuilderChange,
   currentMatches,
+  newExclusions,
   onCreateBlock,
-  onClearFilter
+  onClearFilter,
+  isExcluding = false
 }: FilterBuilderFormProps) {
 
   const handleFieldChange = (fieldValue: string) => {
@@ -45,9 +48,13 @@ export function FilterBuilderForm({
   };
 
   const handleOperatorChange = (operatorValue: string) => {
+    // Clear value if operator doesn't need one
+    const operatorNeedsValue = !['is_empty', 'is_not_empty'].includes(operatorValue);
+
     onFilterBuilderChange({
       ...filterBuilder,
-      operator: operatorValue
+      operator: operatorValue,
+      value: operatorNeedsValue ? filterBuilder.value : ''
     });
   };
 
@@ -69,11 +76,15 @@ export function FilterBuilderForm({
   const availableOperators = getFieldOperators(filterBuilder.field);
   const selectedOperator = availableOperators.find(op => op.value === filterBuilder.operator);
 
+  // Operators that don't require a value
+  const operatorsWithoutValue = ['is_empty', 'is_not_empty'];
+  const operatorNeedsValue = !operatorsWithoutValue.includes(filterBuilder.operator);
+
   const canCreateBlock = filterBuilder.name &&
                         filterBuilder.field &&
                         filterBuilder.operator &&
-                        filterBuilder.value &&
-                        currentMatches.length > 0;
+                        (operatorNeedsValue ? filterBuilder.value : true) &&
+                        newExclusions.length > 0;
 
   const hasAnyInput = filterBuilder.field || filterBuilder.operator || filterBuilder.value || filterBuilder.name;
 
@@ -167,11 +178,14 @@ export function FilterBuilderForm({
           </label>
           <input
             type="text"
-            placeholder={fieldDetails?.placeholder || "Enter value"}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder={operatorNeedsValue ? (fieldDetails?.placeholder || "Enter value") : "No value needed"}
+            className={cn(
+              "w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
+              !operatorNeedsValue && "bg-gray-50 text-gray-400 cursor-not-allowed"
+            )}
             value={filterBuilder.value}
             onChange={(e) => handleValueChange(e.target.value)}
-            disabled={!filterBuilder.field || !filterBuilder.operator}
+            disabled={!filterBuilder.field || !filterBuilder.operator || !operatorNeedsValue}
           />
         </div>
       </div>
@@ -181,7 +195,10 @@ export function FilterBuilderForm({
         <div className="flex items-center space-x-4">
           {filterBuilder.field && (
             <div className="text-sm text-gray-600">
-              <span className="font-medium text-red-600">{currentMatches.length}</span> pages match current filter
+              <span className="font-medium text-blue-600">{currentMatches.length}</span> pages match
+              {newExclusions.length !== currentMatches.length && (
+                <span> • <span className="font-medium text-red-600">{newExclusions.length}</span> new exclusions</span>
+              )}
             </div>
           )}
           {fieldDetails?.description && (
@@ -204,11 +221,23 @@ export function FilterBuilderForm({
 
           <Button
             onClick={onCreateBlock}
-            disabled={!canCreateBlock}
-            className="bg-red-600 hover:bg-red-700 text-white"
+            disabled={!canCreateBlock || isExcluding}
+            className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Plus className="w-4 h-4 mr-2" />
-            Exclude {currentMatches.length} pages
+            {isExcluding ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Excluding...
+              </>
+            ) : (
+              <>
+                <Plus className="w-4 h-4 mr-2" />
+                {newExclusions.length === currentMatches.length
+                  ? `Exclude ${newExclusions.length} pages`
+                  : `Exclude ${newExclusions.length} new pages`
+                }
+              </>
+            )}
           </Button>
         </div>
       </div>

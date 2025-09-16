@@ -91,9 +91,9 @@ export function calculateFilterBlockMatches(
 function evaluateUrlFilter(url: string, operator: string, value: string): boolean {
   switch (operator) {
     case 'contains':
-      return url.includes(value);
+      return url.toLowerCase().includes(value.toLowerCase());
     case 'not_contains':
-      return !url.includes(value);
+      return !url.toLowerCase().includes(value.toLowerCase());
     case 'is_empty':
       return !url || url.trim() === '';
     case 'is_not_empty':
@@ -109,9 +109,9 @@ function evaluateUrlFilter(url: string, operator: string, value: string): boolea
 function evaluateTitleFilter(title: string, operator: string, value: string): boolean {
   switch (operator) {
     case 'contains':
-      return title.includes(value);
+      return title.toLowerCase().includes(value.toLowerCase());
     case 'not_contains':
-      return !title.includes(value);
+      return !title.toLowerCase().includes(value.toLowerCase());
     case 'is_empty':
       return !title || title.trim() === '';
     case 'is_not_empty':
@@ -127,9 +127,9 @@ function evaluateTitleFilter(title: string, operator: string, value: string): bo
 function evaluateMetaDescriptionFilter(meta: string, operator: string, value: string): boolean {
   switch (operator) {
     case 'contains':
-      return meta.includes(value);
+      return meta.toLowerCase().includes(value.toLowerCase());
     case 'not_contains':
-      return !meta.includes(value);
+      return !meta.toLowerCase().includes(value.toLowerCase());
     case 'is_empty':
       return !meta || meta.trim() === '';
     case 'is_not_empty':

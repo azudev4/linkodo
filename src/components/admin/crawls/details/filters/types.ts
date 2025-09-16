@@ -78,10 +78,11 @@ export interface FilterPreset {
 
 // Props for the main FilterInterface component
 export interface FilterInterfaceProps {
-  onExclusionChange: (excludedPages: RawPage[]) => void;
+  onExclusionChange: (newExclusionPageIds: string[]) => void;
   onHighlightChange: (highlightedPageIds: string[]) => void;
   totalCount: number;
   pages: RawPage[];
+  isExcluding?: boolean;
 }
 
 // Props for FilterBuilderForm component
@@ -89,8 +90,10 @@ export interface FilterBuilderFormProps {
   filterBuilder: FilterBuilder;
   onFilterBuilderChange: (builder: FilterBuilder) => void;
   currentMatches: RawPage[];
+  newExclusions: RawPage[];
   onCreateBlock: () => void;
   onClearFilter: () => void;
+  isExcluding?: boolean;
 }
 
 // Props for FilterPresetSidebar component

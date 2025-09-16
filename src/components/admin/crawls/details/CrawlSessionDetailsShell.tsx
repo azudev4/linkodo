@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { FilterInterface } from './filters/FilterInterface';
 import { RawPagesTable } from './RawPagesTable';
 import { RawPage } from './filters/types';
+import { useRawPagesStore } from '@/lib/stores/useRawPagesStore';
 import Link from 'next/link';
 
 interface AnimationContainerProps {
@@ -59,12 +60,22 @@ interface CrawlSession {
 
 export function CrawlSessionDetailsShell({ sessionId }: CrawlSessionDetailsShellProps) {
   const [session, setSession] = useState<CrawlSession | null>(null);
-  const [rawPages, setRawPages] = useState<RawPage[]>([]);
-  const [filteredPages, setFilteredPages] = useState<RawPage[]>([]);
-  const [, setExcludedPages] = useState<string[]>([]);
-  const [highlightedPageIds, setHighlightedPageIds] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+
+  // Use the Zustand store for all raw pages state
+  const {
+    pages: rawPages,
+    filteredPages,
+    loading,
+    error,
+    highlightedPageIds,
+    isExcluding,
+    setSessionId,
+    fetchPages,
+    setHighlightedPages,
+    addExclusions,
+    resetStore
+  } = useRawPagesStore();
 
   const fetchSessionDetails = useCallback(async () => {
     try {
@@ -76,50 +87,32 @@ export function CrawlSessionDetailsShell({ sessionId }: CrawlSessionDetailsShell
       setSession(data);
     } catch (err) {
       console.error('Error fetching session details:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch session');
-    }
-  }, [sessionId]);
-
-  const fetchRawPages = useCallback(async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`/api/admin/crawl-sessions/${sessionId}/raw-pages`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch raw pages');
-      }
-      const data = await response.json();
-      setRawPages(data);
-      setFilteredPages(data);
-    } catch (err) {
-      console.error('Error fetching raw pages:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch pages');
-    } finally {
-      setLoading(false);
+      setSessionError(err instanceof Error ? err.message : 'Failed to fetch session');
     }
   }, [sessionId]);
 
   useEffect(() => {
+    // Initialize store with session ID and fetch data
+    setSessionId(sessionId);
     fetchSessionDetails();
-    fetchRawPages();
-  }, [fetchSessionDetails, fetchRawPages]);
+    fetchPages();
 
-  const handleExclusionChange = (excludedPages: RawPage[]) => {
-    const excludedPageIds = excludedPages.map(page => page.id);
-    setExcludedPages(excludedPageIds);
+    // Cleanup on unmount
+    return () => {
+      resetStore();
+    };
+  }, [sessionId, setSessionId, fetchPages, resetStore, fetchSessionDetails]);
 
-    // Update filtered pages to exclude the selected pages
-    const filtered = rawPages.filter(page => !excludedPageIds.includes(page.id));
-    setFilteredPages(filtered);
-  };
+  // Handle exclusions from filter interface - now uses store
+  const handleExclusionChange = useCallback((newExclusionPageIds: string[]) => {
+    // Simply add these new exclusions to existing ones
+    addExclusions(newExclusionPageIds);
+  }, [addExclusions]);
 
+  // Handle highlight changes for UI preview
   const handleHighlightChange = useCallback((pageIds: string[]) => {
-    setHighlightedPageIds(pageIds);
-  }, []);
-
-  const handlePagesUpdate = useCallback((updatedPages: RawPage[]) => {
-    setRawPages(updatedPages);
-    setFilteredPages(updatedPages);
-  }, []);
+    setHighlightedPages(pageIds);
+  }, [setHighlightedPages]);
 
   const getClientDisplayName = () => {
     if (!session) return 'Loading...';
@@ -128,14 +121,14 @@ export function CrawlSessionDetailsShell({ sessionId }: CrawlSessionDetailsShell
     return 'Unassigned';
   };
 
-  if (error) {
+  if (error || sessionError) {
     return (
       <div className="space-y-8">
         <AnimationContainer>
           <div className="text-center py-12">
             <Globe className="w-12 h-12 text-red-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">Error loading session</h3>
-            <p className="text-gray-500 mb-4">{error}</p>
+            <p className="text-gray-500 mb-4">{error || sessionError}</p>
             <div className="space-x-4">
               <Link href="/admin/crawls">
                 <Button variant="outline">Back to Sessions</Button>
@@ -196,15 +189,17 @@ export function CrawlSessionDetailsShell({ sessionId }: CrawlSessionDetailsShell
           onHighlightChange={handleHighlightChange}
           totalCount={rawPages.length}
           pages={rawPages}
+          isExcluding={isExcluding}
         />
       </div>
 
       {/* Raw Pages Table */}
       <AnimationContainer delay={0.2}>
         <RawPagesTable
-          pages={filteredPages}
-          onPagesUpdate={handlePagesUpdate}
-          selectedCrawlSession={sessionId}
+          pages={rawPages} // Pass FULL pages array so table can calculate correct counts
+          onPagesUpdate={() => {}} // Will be removed - table should use store directly
+          onRefresh={fetchPages}
+          sessionId={sessionId}
           loading={loading}
           highlightedPageIds={highlightedPageIds}
         />

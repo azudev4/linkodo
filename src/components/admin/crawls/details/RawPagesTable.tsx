@@ -31,12 +31,13 @@ import {
 interface RawPagesTableProps {
   pages: RawPage[];
   onPagesUpdate: (pages: RawPage[]) => void;
-  selectedCrawlSession?: string;
+  onRefresh?: () => void;
+  sessionId: string;
   loading?: boolean;
   highlightedPageIds?: string[];
 }
 
-export function RawPagesTable({ pages, onPagesUpdate, loading = false, highlightedPageIds = [] }: RawPagesTableProps) {
+export function RawPagesTable({ pages, onPagesUpdate, onRefresh, sessionId, loading = false, highlightedPageIds = [] }: RawPagesTableProps) {
   const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<'all' | 'included' | 'excluded'>('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -133,13 +134,47 @@ export function RawPagesTable({ pages, onPagesUpdate, loading = false, highlight
   //   clearSelection();
   // };
 
-  const togglePageInclusion = (pageId: string) => {
+  const togglePageInclusion = async (pageId: string) => {
+    console.log('🔥 togglePageInclusion called for page:', pageId);
+
+    // Update the UI immediately for responsive feel
     const updatedPages = pages.map(page =>
       page.id === pageId
         ? { ...page, excluded: !page.excluded }
         : page
     );
+
+    console.log('🔥 Calling onPagesUpdate with updated pages');
     onPagesUpdate(updatedPages);
+
+    // Also update just this specific page in the database
+    try {
+      const pageToUpdate = updatedPages.find(p => p.id === pageId);
+      if (pageToUpdate) {
+        console.log('🔥 Making API call - Updating page:', pageId, 'excluded:', pageToUpdate.excluded);
+
+        const response = await fetch(`/api/admin/crawl-sessions/${sessionId}/raw-pages/${pageId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ excluded: pageToUpdate.excluded }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to update page exclusion');
+        }
+
+        console.log('Page updated successfully');
+
+        // Refresh the data to get the latest state
+        if (onRefresh) {
+          onRefresh();
+        }
+      }
+    } catch (error) {
+      console.error('Error updating page exclusion:', error);
+    }
   };
 
   const handleSort = (column: typeof sortBy) => {

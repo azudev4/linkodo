@@ -40,7 +40,8 @@ export function FilterInterface({
   onExclusionChange,
   onHighlightChange,
   totalCount,
-  pages
+  pages,
+  isExcluding = false
 }: FilterInterfaceProps) {
 
   // Main state management
@@ -57,6 +58,11 @@ export function FilterInterface({
   const currentMatches = useMemo(() => {
     return calculateFilterPreviewMatches(pages, filterBuilder);
   }, [pages, filterBuilder]);
+
+  // Calculate only NEW exclusions (pages that aren't already excluded)
+  const newExclusions = useMemo(() => {
+    return currentMatches.filter(page => !page.excluded);
+  }, [currentMatches]);
 
   // Update table highlighting whenever current matches change
   useEffect(() => {
@@ -82,7 +88,7 @@ export function FilterInterface({
 
   // Create a new filter block from the current builder
   const handleCreateBlock = useCallback(() => {
-    if (!filterBuilder.name || !filterBuilder.field || !filterBuilder.operator || currentMatches.length === 0) {
+    if (!filterBuilder.name || !filterBuilder.field || !filterBuilder.operator || newExclusions.length === 0) {
       return;
     }
 
@@ -100,18 +106,18 @@ export function FilterInterface({
         value: filterBuilder.value,
         label: `${fieldDetails?.label} ${operatorLabel} ${filterBuilder.value}`
       }],
-      matchCount: currentMatches.length,
+      matchCount: newExclusions.length, // Only count NEW exclusions
       color: 'red'
     };
 
     const updatedBlocks = [...filterBlocks, newBlock];
     setFilterBlocks(updatedBlocks);
-    updateExclusions(updatedBlocks);
+    updateExclusions(updatedBlocks, true); // Mark as new block
 
     // Reset builder and clear highlighting
     handleClearFilter();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterBuilder, currentMatches, filterBlocks, handleClearFilter]);
+  }, [filterBuilder, newExclusions, filterBlocks, handleClearFilter]);
 
   // Add a preset filter block
   const handleAddPreset = useCallback((presetId: string) => {
@@ -133,13 +139,14 @@ export function FilterInterface({
       color: preset.color
     };
 
-    // Calculate matches for the preset
+    // Calculate matches for the preset - only count NEW exclusions
     const matches = calculateFilterBlockMatches(pages, newBlock.criteria);
-    newBlock.matchCount = matches.length;
+    const newExclusionsForPreset = matches.filter(page => !page.excluded);
+    newBlock.matchCount = newExclusionsForPreset.length;
 
     const updatedBlocks = [...filterBlocks, newBlock];
     setFilterBlocks(updatedBlocks);
-    updateExclusions(updatedBlocks);
+    updateExclusions(updatedBlocks, true); // Mark as new block
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pages, filterBlocks]);
 
@@ -147,7 +154,8 @@ export function FilterInterface({
   const handleRemoveBlock = useCallback((blockId: string) => {
     const updatedBlocks = filterBlocks.filter(block => block.id !== blockId);
     setFilterBlocks(updatedBlocks);
-    updateExclusions(updatedBlocks);
+    // Note: We don't auto-remove exclusions when removing blocks
+    // Users can manually re-include pages if needed
 
     // Clear selection if the removed block was selected
     if (selectedBlockId === blockId) {
@@ -162,21 +170,26 @@ export function FilterInterface({
   }, []);
 
   // Update exclusions based on all active filter blocks
-  const updateExclusions = useCallback((blocks: FilterBlock[]) => {
+  // Now only sends NEW exclusions, not all exclusions
+  const updateExclusions = useCallback((blocks: FilterBlock[], isNewBlock = false) => {
     if (!pages || pages.length === 0) {
-      onExclusionChange([]);
       return;
     }
 
-    // Collect all pages excluded by any block (union of all blocks)
-    const allExcluded = new Set<string>();
-    blocks.forEach(block => {
-      const blockMatches = calculateFilterBlockMatches(pages, block.criteria);
-      blockMatches.forEach(page => allExcluded.add(page.id));
-    });
+    if (isNewBlock && blocks.length > 0) {
+      // For new blocks, only send the pages matched by the last (newest) block
+      const newBlock = blocks[blocks.length - 1];
+      const newBlockMatches = calculateFilterBlockMatches(pages, newBlock.criteria);
+      const newExclusionIds = newBlockMatches
+        .filter(page => !page.excluded) // Only non-excluded pages
+        .map(page => page.id);
 
-    const excludedPagesArray = pages.filter(page => allExcluded.has(page.id));
-    onExclusionChange(excludedPagesArray);
+      if (newExclusionIds.length > 0) {
+        onExclusionChange(newExclusionIds);
+      }
+    }
+    // When removing blocks, we don't automatically re-include pages
+    // The user would need to manually remove exclusions if they want
   }, [pages, onExclusionChange]);
 
   // Calculate totals for display
@@ -215,8 +228,10 @@ export function FilterInterface({
             filterBuilder={filterBuilder}
             onFilterBuilderChange={handleFilterBuilderChange}
             currentMatches={currentMatches}
+            newExclusions={newExclusions}
             onCreateBlock={handleCreateBlock}
             onClearFilter={handleClearFilter}
+            isExcluding={isExcluding}
           />
 
           {/* Preset Suggestions Sidebar */}

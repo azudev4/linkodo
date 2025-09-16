@@ -169,6 +169,7 @@ export type Database = {
           content_hash: string | null
           crawled_at: string | null
           created_at: string | null
+          excluded: boolean | null
           h1_tags: Json | null
           id: string
           link_hash: string | null
@@ -186,6 +187,7 @@ export type Database = {
           content_hash?: string | null
           crawled_at?: string | null
           created_at?: string | null
+          excluded?: boolean | null
           h1_tags?: Json | null
           id?: string
           link_hash?: string | null
@@ -203,6 +205,7 @@ export type Database = {
           content_hash?: string | null
           crawled_at?: string | null
           created_at?: string | null
+          excluded?: boolean | null
           h1_tags?: Json | null
           id?: string
           link_hash?: string | null

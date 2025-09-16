@@ -73,7 +73,7 @@ export function FilterBlockCard({
 
       {/* Footer with exclusion count */}
       <div className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-        {block.matchCount} page{block.matchCount !== 1 ? 's' : ''} excluded
+        {block.matchCount} new exclusion{block.matchCount !== 1 ? 's' : ''}
       </div>
     </div>
   );
