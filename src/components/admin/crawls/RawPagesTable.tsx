@@ -52,7 +52,7 @@ interface RawPage {
   created_at: string | null;
   updated_at: string | null;
   // Added for filtering
-  included: boolean;
+  excluded: boolean;
   filtered_reason?: string;
 }
 
@@ -60,22 +60,26 @@ interface RawPagesTableProps {
   pages: RawPage[];
   onPagesUpdate: (pages: RawPage[]) => void;
   selectedCrawlSession?: string;
+  loading?: boolean;
 }
 
-export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession }: RawPagesTableProps) {
+export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, loading = false }: RawPagesTableProps) {
   const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
   const [showExcluded, setShowExcluded] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortBy, setSortBy] = useState<'url' | 'title' | 'status_code' | 'crawled_at'>('crawled_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const itemsPerPage = 50;
+  const topScrollRef = React.useRef<HTMLDivElement>(null);
+  const tableScrollRef = React.useRef<HTMLDivElement>(null);
+  const [tableScrollWidth, setTableScrollWidth] = React.useState(2000);
 
   // Filter and sort pages
   const filteredPages = useMemo(() => {
     let filtered = pages;
 
     if (!showExcluded) {
-      filtered = filtered.filter(page => page.included);
+      filtered = filtered.filter(page => !page.excluded);
     }
 
     // Sort pages
@@ -105,8 +109,8 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession }: Ra
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedPages = filteredPages.slice(startIndex, startIndex + itemsPerPage);
 
-  const includedCount = pages.filter(p => p.included).length;
-  const excludedCount = pages.length - includedCount;
+  const excludedCount = pages.filter(p => p.excluded).length;
+  const includedCount = pages.length - excludedCount;
 
   const togglePageSelection = (pageId: string) => {
     const newSelected = new Set(selectedPages);
@@ -129,7 +133,7 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession }: Ra
 
   const bulkInclude = () => {
     const updatedPages = pages.map(page =>
-      selectedPages.has(page.id) ? { ...page, included: true } : page
+      selectedPages.has(page.id) ? { ...page, excluded: false } : page
     );
     onPagesUpdate(updatedPages);
     clearSelection();
@@ -138,7 +142,7 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession }: Ra
   const bulkExclude = (reason?: string) => {
     const updatedPages = pages.map(page =>
       selectedPages.has(page.id)
-        ? { ...page, included: false, filtered_reason: reason || 'Manual exclusion' }
+        ? { ...page, excluded: true, filtered_reason: reason || 'Manual exclusion' }
         : page
     );
     onPagesUpdate(updatedPages);
@@ -148,7 +152,7 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession }: Ra
   const togglePageInclusion = (pageId: string) => {
     const updatedPages = pages.map(page =>
       page.id === pageId
-        ? { ...page, included: !page.included }
+        ? { ...page, excluded: !page.excluded }
         : page
     );
     onPagesUpdate(updatedPages);
@@ -187,6 +191,37 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession }: Ra
     if (statusCode >= 400) return <XCircle className="w-4 h-4" />;
     return <AlertCircle className="w-4 h-4" />;
   };
+
+  const handleTopScroll = () => {
+    if (topScrollRef.current && tableScrollRef.current) {
+      tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+    }
+  };
+
+  const handleTableScroll = () => {
+    if (topScrollRef.current && tableScrollRef.current) {
+      topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+    }
+  };
+
+  // Update scroll width when table renders
+  React.useEffect(() => {
+    if (tableScrollRef.current) {
+      const updateScrollWidth = () => {
+        if (tableScrollRef.current) {
+          setTableScrollWidth(tableScrollRef.current.scrollWidth);
+        }
+      };
+
+      updateScrollWidth();
+
+      // Update on resize
+      const resizeObserver = new ResizeObserver(updateScrollWidth);
+      resizeObserver.observe(tableScrollRef.current);
+
+      return () => resizeObserver.disconnect();
+    }
+  }, [paginatedPages.length]);
 
   return (
     <div className="space-y-4">
@@ -230,52 +265,69 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession }: Ra
             </div>
           </div>
 
-          {/* Bulk Actions */}
-          {selectedPages.size > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-blue-50 rounded-lg p-4 border border-blue-200"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-blue-900">
-                  {selectedPages.size} page{selectedPages.size !== 1 ? 's' : ''} selected
-                </span>
-                <div className="flex space-x-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={bulkInclude}
-                    className="border-green-200 hover:bg-green-50 text-green-700"
-                  >
-                    <Check className="w-4 h-4 mr-2" />
-                    Include
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => bulkExclude()}
-                    className="border-red-200 hover:bg-red-50 text-red-700"
-                  >
-                    <X className="w-4 h-4 mr-2" />
-                    Exclude
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={clearSelection}
-                    className="text-gray-600"
-                  >
-                    Clear
-                  </Button>
-                </div>
+        </div>
+
+        {/* Top Pagination */}
+        {totalPages > 1 && (
+          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, filteredPages.length)} of {filteredPages.length} pages
               </div>
-            </motion.div>
-          )}
+              <div className="flex items-center space-x-3">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCurrentPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <div className="flex items-center space-x-3">
+                  <span className="text-sm font-medium whitespace-nowrap">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <input
+                    type="range"
+                    min="1"
+                    max={totalPages}
+                    value={currentPage}
+                    onChange={(e) => setCurrentPage(Number(e.target.value))}
+                    className="w-24 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                    style={{
+                      background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((currentPage - 1) / (totalPages - 1)) * 100}%, #e5e7eb ${((currentPage - 1) / (totalPages - 1)) * 100}%, #e5e7eb 100%)`
+                    }}
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Top Horizontal Scroll */}
+        <div
+          ref={topScrollRef}
+          className="overflow-x-auto border-t border-gray-100 bg-gray-50"
+          onScroll={handleTopScroll}
+          style={{ height: '20px' }}
+        >
+          <div style={{ width: `${tableScrollWidth}px`, height: '1px' }}></div>
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto">
+        <div
+          ref={tableScrollRef}
+          className="overflow-x-auto"
+          onScroll={handleTableScroll}
+        >
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
@@ -287,8 +339,11 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession }: Ra
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
+                <th
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
+                  onClick={() => handleSort('status_code')}
+                >
+                  Code
                 </th>
                 <th
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
@@ -305,11 +360,8 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession }: Ra
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Meta Description
                 </th>
-                <th
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
-                  onClick={() => handleSort('status_code')}
-                >
-                  Code
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
                 </th>
                 <th
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
@@ -328,7 +380,7 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession }: Ra
                   key={page.id}
                   className={cn(
                     "hover:bg-gray-50 transition-colors",
-                    !page.included && "opacity-50 bg-gray-25"
+                    page.excluded && "opacity-50 bg-gray-25"
                   )}
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -340,18 +392,9 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession }: Ra
                     />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      {page.included ? (
-                        <div className="flex items-center text-green-600">
-                          <CheckCircle className="w-4 h-4 mr-1" />
-                          <span className="text-xs font-medium">Included</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center text-red-600">
-                          <XCircle className="w-4 h-4 mr-1" />
-                          <span className="text-xs font-medium">Excluded</span>
-                        </div>
-                      )}
+                    <div className={cn("flex items-center text-sm font-medium", getStatusColor(page.status_code))}>
+                      {getStatusIcon(page.status_code)}
+                      <span className="ml-1">{page.status_code || 'N/A'}</span>
                     </div>
                   </td>
                   <td className="px-6 py-4">
@@ -379,9 +422,18 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession }: Ra
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className={cn("flex items-center text-sm font-medium", getStatusColor(page.status_code))}>
-                      {getStatusIcon(page.status_code)}
-                      <span className="ml-1">{page.status_code || 'N/A'}</span>
+                    <div className="flex items-center">
+                      {!page.excluded ? (
+                        <div className="flex items-center text-green-600">
+                          <CheckCircle className="w-4 h-4 mr-1" />
+                          <span className="text-xs font-medium">Included</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center text-red-600">
+                          <XCircle className="w-4 h-4 mr-1" />
+                          <span className="text-xs font-medium">Excluded</span>
+                        </div>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
@@ -395,13 +447,13 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession }: Ra
                         onClick={() => togglePageInclusion(page.id)}
                         className={cn(
                           "h-8 w-8 p-0",
-                          page.included
+                          !page.excluded
                             ? "text-red-600 hover:text-red-700 hover:bg-red-50"
                             : "text-green-600 hover:text-green-700 hover:bg-green-50"
                         )}
-                        title={page.included ? "Exclude page" : "Include page"}
+                        title={!page.excluded ? "Exclude page" : "Include page"}
                       >
-                        {page.included ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                        {!page.excluded ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
                       </Button>
 
                       <DropdownMenu>
@@ -455,9 +507,9 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession }: Ra
 
                           <DropdownMenuItem
                             onClick={() => togglePageInclusion(page.id)}
-                            className={page.included ? "text-red-600" : "text-green-600"}
+                            className={!page.excluded ? "text-red-600" : "text-green-600"}
                           >
-                            {page.included ? (
+                            {!page.excluded ? (
                               <>
                                 <X className="w-4 h-4 mr-2" />
                                 Exclude Page

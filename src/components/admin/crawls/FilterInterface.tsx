@@ -15,6 +15,12 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface FilterState {
   statusCodes: string[];
@@ -207,33 +213,72 @@ export function FilterInterface({ onFiltersChange, filteredCount, totalCount }: 
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Status Code
             </label>
-            <select
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={filters.statusCodes[0] || '200'}
-              onChange={(e) => updateFilters({ statusCodes: [e.target.value] })}
-            >
-              <option value="200">200 Only</option>
-              <option value="all">All Codes</option>
-              <option value="2xx">2xx Success</option>
-              <option value="3xx">3xx Redirects</option>
-              <option value="4xx">4xx Errors</option>
-            </select>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-full justify-between border-gray-200 hover:bg-gray-50"
+                >
+                  {filters.statusCodes[0] === '200' && '200 Only'}
+                  {filters.statusCodes[0] === 'all' && 'All Codes'}
+                  {filters.statusCodes[0] === '2xx' && '2xx Success'}
+                  {filters.statusCodes[0] === '3xx' && '3xx Redirects'}
+                  {filters.statusCodes[0] === '4xx' && '4xx Errors'}
+                  <ChevronDown className="w-4 h-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-full">
+                <DropdownMenuItem onClick={() => updateFilters({ statusCodes: ['200'] })}>
+                  200 Only
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => updateFilters({ statusCodes: ['all'] })}>
+                  All Codes
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => updateFilters({ statusCodes: ['2xx'] })}>
+                  2xx Success
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => updateFilters({ statusCodes: ['3xx'] })}>
+                  3xx Redirects
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => updateFilters({ statusCodes: ['4xx'] })}>
+                  4xx Errors
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Content Type
             </label>
-            <select
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={filters.contentTypes[0] || 'text/html'}
-              onChange={(e) => updateFilters({ contentTypes: [e.target.value] })}
-            >
-              <option value="text/html">HTML Only</option>
-              <option value="all">All Types</option>
-              <option value="application/pdf">PDFs</option>
-              <option value="image">Images</option>
-            </select>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-full justify-between border-gray-200 hover:bg-gray-50"
+                >
+                  {filters.contentTypes[0] === 'text/html' && 'HTML Only'}
+                  {filters.contentTypes[0] === 'all' && 'All Types'}
+                  {filters.contentTypes[0] === 'application/pdf' && 'PDFs'}
+                  {filters.contentTypes[0] === 'image' && 'Images'}
+                  <ChevronDown className="w-4 h-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-full">
+                <DropdownMenuItem onClick={() => updateFilters({ contentTypes: ['text/html'] })}>
+                  HTML Only
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => updateFilters({ contentTypes: ['all'] })}>
+                  All Types
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => updateFilters({ contentTypes: ['application/pdf'] })}>
+                  PDFs
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => updateFilters({ contentTypes: ['image'] })}>
+                  Images
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           <div>
@@ -307,30 +352,60 @@ export function FilterInterface({ onFiltersChange, filteredCount, totalCount }: 
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Has Meta Description
                     </label>
-                    <select
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={filters.hasMetaDescription}
-                      onChange={(e) => updateFilters({ hasMetaDescription: e.target.value as 'all' | 'yes' | 'no' })}
-                    >
-                      <option value="all">All Pages</option>
-                      <option value="yes">Yes</option>
-                      <option value="no">No</option>
-                    </select>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full justify-between border-gray-200 hover:bg-gray-50"
+                        >
+                          {filters.hasMetaDescription === 'all' && 'All Pages'}
+                          {filters.hasMetaDescription === 'yes' && 'Yes'}
+                          {filters.hasMetaDescription === 'no' && 'No'}
+                          <ChevronDown className="w-4 h-4 ml-2" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-full">
+                        <DropdownMenuItem onClick={() => updateFilters({ hasMetaDescription: 'all' })}>
+                          All Pages
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => updateFilters({ hasMetaDescription: 'yes' })}>
+                          Yes
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => updateFilters({ hasMetaDescription: 'no' })}>
+                          No
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Has Title Tag
                     </label>
-                    <select
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={filters.hasTitleTag}
-                      onChange={(e) => updateFilters({ hasTitleTag: e.target.value as 'all' | 'yes' | 'no' })}
-                    >
-                      <option value="all">All Pages</option>
-                      <option value="yes">Yes</option>
-                      <option value="no">No</option>
-                    </select>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full justify-between border-gray-200 hover:bg-gray-50"
+                        >
+                          {filters.hasTitleTag === 'all' && 'All Pages'}
+                          {filters.hasTitleTag === 'yes' && 'Yes'}
+                          {filters.hasTitleTag === 'no' && 'No'}
+                          <ChevronDown className="w-4 h-4 ml-2" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-full">
+                        <DropdownMenuItem onClick={() => updateFilters({ hasTitleTag: 'all' })}>
+                          All Pages
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => updateFilters({ hasTitleTag: 'yes' })}>
+                          Yes
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => updateFilters({ hasTitleTag: 'no' })}>
+                          No
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
 
                   <div>

@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Filter } from 'lucide-react';
+import { Filter } from 'lucide-react';
 import { motion, useInView } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { RefreshButton } from '@/components/ui/refresh-button';
+import { SearchInput } from '@/components/ui/SearchInput';
 
 interface AdminUsersSearchProps {
   onSearchChange: (search: string, role: string) => void;
@@ -47,9 +48,10 @@ export function AdminUsersSearch({ onSearchChange, className, delay = 0 }: Admin
   const [selectedRole, setSelectedRole] = useState<string>('all');
 
   // Manual search trigger
-  const handleSearch = useCallback(() => {
-    onSearchChange(searchTerm, selectedRole);
-  }, [searchTerm, selectedRole, onSearchChange]);
+  const handleSearch = useCallback((search: string) => {
+    setSearchTerm(search);
+    onSearchChange(search, selectedRole);
+  }, [selectedRole, onSearchChange]);
 
   // Handle role change immediately (dropdowns are cheap)
   const handleRoleChange = (role: string) => {
@@ -57,12 +59,11 @@ export function AdminUsersSearch({ onSearchChange, className, delay = 0 }: Admin
     onSearchChange(searchTerm, role);
   };
 
-  // Handle Enter key press
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
-  };
+  // Handle clear search
+  const handleClearSearch = useCallback(() => {
+    setSearchTerm('');
+    onSearchChange('', selectedRole);
+  }, [selectedRole, onSearchChange]);
 
   // Handle refresh - reset everything and reload
   const handleRefresh = useCallback(() => {
@@ -81,24 +82,15 @@ export function AdminUsersSearch({ onSearchChange, className, delay = 0 }: Admin
       <div className="bg-white rounded-2xl p-6 shadow-[0_0_40px_rgb(0,0,0,0.08)] border border-blue-100">
         <div className="flex flex-col lg:flex-row gap-4">
           {/* Search Input */}
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search users by name, email, or company... (Press Enter to search)"
+          <div className="flex-1">
+            <SearchInput
+              placeholder="Search users by name, email, or company..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyPress={handleKeyPress}
-              className="w-full pl-12 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+              onSearch={handleSearch}
+              onClear={handleClearSearch}
+              size="lg"
+              className="w-full"
             />
-            {/* Search button */}
-            <button
-              onClick={handleSearch}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200"
-              title="Search users"
-            >
-              <Search className="w-4 h-4" />
-            </button>
           </div>
 
           {/* Role Filter & Refresh */}

@@ -16,45 +16,57 @@ export type Database = {
     Tables: {
       crawl_sessions: {
         Row: {
-          client_name: string | null
+          client: string | null
           completed_at: string | null
           created_at: string | null
           domain: string
           id: string
+          review_progress: string | null
           started_at: string | null
           status: string | null
           total_pages: number | null
           updated_at: string | null
         }
         Insert: {
-          client_name?: string | null
+          client?: string | null
           completed_at?: string | null
           created_at?: string | null
           domain: string
           id?: string
+          review_progress?: string | null
           started_at?: string | null
           status?: string | null
           total_pages?: number | null
           updated_at?: string | null
         }
         Update: {
-          client_name?: string | null
+          client?: string | null
           completed_at?: string | null
           created_at?: string | null
           domain?: string
           id?: string
+          review_progress?: string | null
           started_at?: string | null
           status?: string | null
           total_pages?: number | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "crawl_sessions_client_fkey"
+            columns: ["client"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pages: {
         Row: {
-          client_name: string | null
+          client: string | null
           content_hash: string | null
           crawled_at: string | null
+          embedding: string | null
           h1_tags: Json | null
           id: string
           link_hash: string | null
@@ -67,9 +79,10 @@ export type Database = {
           url: string
         }
         Insert: {
-          client_name?: string | null
+          client?: string | null
           content_hash?: string | null
           crawled_at?: string | null
+          embedding?: string | null
           h1_tags?: Json | null
           id?: string
           link_hash?: string | null
@@ -82,9 +95,10 @@ export type Database = {
           url: string
         }
         Update: {
-          client_name?: string | null
+          client?: string | null
           content_hash?: string | null
           crawled_at?: string | null
+          embedding?: string | null
           h1_tags?: Json | null
           id?: string
           link_hash?: string | null
@@ -97,6 +111,13 @@ export type Database = {
           url?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "pages_client_fkey"
+            columns: ["client"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "pages_session_id_fkey"
             columns: ["session_id"]
@@ -112,6 +133,7 @@ export type Database = {
           company_name: string | null
           created_at: string | null
           email: string | null
+          email_verified: boolean | null
           full_name: string | null
           id: string
           role: string | null
@@ -122,6 +144,7 @@ export type Database = {
           company_name?: string | null
           created_at?: string | null
           email?: string | null
+          email_verified?: boolean | null
           full_name?: string | null
           id: string
           role?: string | null
@@ -132,6 +155,7 @@ export type Database = {
           company_name?: string | null
           created_at?: string | null
           email?: string | null
+          email_verified?: boolean | null
           full_name?: string | null
           id?: string
           role?: string | null
@@ -141,7 +165,7 @@ export type Database = {
       }
       raw_pages: {
         Row: {
-          client_name: string | null
+          client: string | null
           content_hash: string | null
           crawled_at: string | null
           created_at: string | null
@@ -158,7 +182,7 @@ export type Database = {
           url: string
         }
         Insert: {
-          client_name?: string | null
+          client?: string | null
           content_hash?: string | null
           crawled_at?: string | null
           created_at?: string | null
@@ -175,7 +199,7 @@ export type Database = {
           url: string
         }
         Update: {
-          client_name?: string | null
+          client?: string | null
           content_hash?: string | null
           crawled_at?: string | null
           created_at?: string | null
@@ -193,6 +217,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "raw_pages_client_fkey"
+            columns: ["client"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "raw_pages_session_id_fkey"
             columns: ["session_id"]
             isOneToOne: false
@@ -201,12 +232,133 @@ export type Database = {
           },
         ]
       }
+      verification_codes: {
+        Row: {
+          code: string
+          created_at: string | null
+          email: string
+          expires_at: string
+          id: string
+          used: boolean | null
+          user_id: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          email: string
+          expires_at: string
+          id?: string
+          used?: boolean | null
+          user_id?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          email?: string
+          expires_at?: string
+          id?: string
+          used?: boolean | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      binary_quantize: {
+        Args: { "": string } | { "": unknown }
+        Returns: unknown
+      }
+      halfvec_avg: {
+        Args: { "": number[] }
+        Returns: unknown
+      }
+      halfvec_out: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      halfvec_send: {
+        Args: { "": unknown }
+        Returns: string
+      }
+      halfvec_typmod_in: {
+        Args: { "": unknown[] }
+        Returns: number
+      }
+      hnsw_bit_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      hnsw_halfvec_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      hnsw_sparsevec_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      hnswhandler: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      ivfflat_bit_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      ivfflat_halfvec_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      ivfflathandler: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      l2_norm: {
+        Args: { "": unknown } | { "": unknown }
+        Returns: number
+      }
+      l2_normalize: {
+        Args: { "": string } | { "": unknown } | { "": unknown }
+        Returns: unknown
+      }
+      sparsevec_out: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      sparsevec_send: {
+        Args: { "": unknown }
+        Returns: string
+      }
+      sparsevec_typmod_in: {
+        Args: { "": unknown[] }
+        Returns: number
+      }
+      vector_avg: {
+        Args: { "": number[] }
+        Returns: string
+      }
+      vector_dims: {
+        Args: { "": string } | { "": unknown }
+        Returns: number
+      }
+      vector_norm: {
+        Args: { "": string }
+        Returns: number
+      }
+      vector_out: {
+        Args: { "": string }
+        Returns: unknown
+      }
+      vector_send: {
+        Args: { "": string }
+        Returns: string
+      }
+      vector_typmod_in: {
+        Args: { "": unknown[] }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never
