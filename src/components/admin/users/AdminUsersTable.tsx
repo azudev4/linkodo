@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { MoreHorizontal, UserPlus, Edit, Trash2, Crown } from 'lucide-react';
+import { UserPlus, Edit, Trash2, Crown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { motion, useInView } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -206,7 +206,7 @@ export function AdminUsersTable() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {users.map((user, index) => (
+                  {users.map((user) => (
                     <tr key={user.id} className="hover:bg-gray-50 transition-colors duration-200">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div>

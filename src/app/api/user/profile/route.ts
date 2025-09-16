@@ -51,7 +51,7 @@ export const PATCH = withAuth(async (request, { user, serviceSupabase }) => {
     }
 
     // Build update object with only provided fields
-    const updateData: { [key: string]: any } = {
+    const updateData: { [key: string]: unknown } = {
       updated_at: new Date().toISOString()
     }
 

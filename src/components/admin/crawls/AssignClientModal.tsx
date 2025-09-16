@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,6 @@ import { Button } from '@/components/ui/button';
 import { SearchInput } from '@/components/ui/SearchInput';
 import {
   User,
-  Building2,
   Mail,
   Loader2,
   UserX,
@@ -54,13 +53,9 @@ export function AssignClientModal({
   const [unassigning, setUnassigning] = useState(false);
   const limit = 10;
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchProfiles();
-    }
-  }, [isOpen, currentPage, searchTerm]);
+  
 
-  const fetchProfiles = async () => {
+  const fetchProfiles = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -89,7 +84,14 @@ export function AssignClientModal({
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, searchTerm]);
+
+  // Trigger fetch when modal opens or dependencies change, after fetchProfiles is declared
+  useEffect(() => {
+    if (isOpen) {
+      fetchProfiles();
+    }
+  }, [isOpen, fetchProfiles]);
 
   const handleSearch = (value: string) => {
     setSearchTerm(value);

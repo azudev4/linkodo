@@ -1,13 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import {
   Globe,
-  CheckCircle,
   XCircle,
-  AlertCircle,
   Filter,
   Eye,
   MoreHorizontal,
@@ -65,11 +63,9 @@ export function ClientSessionsList({ onSessionSelect }: ClientSessionsListProps)
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedSessionForAssignment, setSelectedSessionForAssignment] = useState<CrawlSession | null>(null);
 
-  useEffect(() => {
-    fetchSessions();
-  }, [selectedStatus]);
+  
 
-  const fetchSessions = async () => {
+  const fetchSessions = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -93,7 +89,12 @@ export function ClientSessionsList({ onSessionSelect }: ClientSessionsListProps)
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedStatus]);
+
+  // Trigger initial and dependency-based fetches after fetchSessions is declared
+  useEffect(() => {
+    fetchSessions();
+  }, [fetchSessions]);
 
   const handleDeleteSession = async (sessionId: string) => {
     try {
@@ -128,7 +129,7 @@ export function ClientSessionsList({ onSessionSelect }: ClientSessionsListProps)
 
       setSessions(sessions.map(session =>
         session.id === sessionId
-          ? { ...session, review_progress: reviewProgress as any }
+          ? { ...session, review_progress: reviewProgress as CrawlSession['review_progress'] }
           : session
       ));
     } catch (err) {
@@ -177,7 +178,7 @@ export function ClientSessionsList({ onSessionSelect }: ClientSessionsListProps)
             return {
               ...session,
               client: clientId || null,
-              client_profile: null // Will be updated on next refresh
+              client_profile: undefined // Will be updated on next refresh
             };
           }
           return session;
@@ -225,16 +226,21 @@ export function ClientSessionsList({ onSessionSelect }: ClientSessionsListProps)
     return 'Unassigned';
   };
 
-  const getNextReviewProgress = (current: string = 'needs_review') => {
-    const cycle = {
+  const getNextReviewProgress = (
+    current: CrawlSession['review_progress'] = 'needs_review'
+  ) => {
+    const cycle: Record<'needs_review' | 'in_progress' | 'pushed', 'in_progress' | 'pushed' | 'needs_review'> = {
       'needs_review': 'in_progress',
       'in_progress': 'pushed',
       'pushed': 'needs_review'
     };
-    return cycle[current] || 'in_progress';
+    return cycle[current];
   };
 
-  const getReviewProgressBadge = (sessionId: string, reviewProgress: string = 'needs_review') => {
+  const getReviewProgressBadge = (
+    sessionId: string,
+    reviewProgress: CrawlSession['review_progress'] = 'needs_review'
+  ) => {
     const config = {
       needs_review: { label: 'Needs Review', class: 'bg-yellow-100 text-yellow-700 border-yellow-200 hover:bg-yellow-200' },
       in_progress: { label: 'In Progress', class: 'bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200' },

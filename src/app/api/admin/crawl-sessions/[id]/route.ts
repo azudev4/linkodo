@@ -80,7 +80,7 @@ export async function PUT(
     const body = await request.json();
 
     const allowedUpdates = ['status', 'client', 'domain', 'review_progress'];
-    const updates: Record<string, any> = {};
+    const updates: Record<string, unknown> = {};
 
     for (const key of allowedUpdates) {
       if (key in body) {

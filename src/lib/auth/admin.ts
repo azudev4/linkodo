@@ -1,7 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
-import { NextRequest } from 'next/server';
 
-export async function validateAdminAccess(request: NextRequest) {
+export async function validateAdminAccess() {
   try {
     const supabase = await createClient();
 

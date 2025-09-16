@@ -5,7 +5,7 @@ import { validateAdminAccess } from '@/lib/auth/admin';
 export async function GET(request: NextRequest) {
   try {
     // Validate admin access
-    const validation = await validateAdminAccess(request);
+    const validation = await validateAdminAccess();
     if (!validation.success) {
       return NextResponse.json(
         { error: validation.error },
@@ -13,7 +13,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const supabase = createServiceRoleClient();
     const { searchParams } = new URL(request.url);
 
     // Parse query parameters
@@ -76,7 +75,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // Validate admin access
-    const validation = await validateAdminAccess(request);
+    const validation = await validateAdminAccess();
     if (!validation.success) {
       return NextResponse.json(
         { error: validation.error },

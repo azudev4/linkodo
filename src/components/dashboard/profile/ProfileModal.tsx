@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { User, Mail, Calendar, Shield, Edit3, Save, X, Camera, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -104,9 +105,11 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
         <div className="flex justify-center -mt-12 relative z-20 px-6">
           <div className="relative group">
             {profile?.avatar_url ? (
-              <img
+              <Image
                 src={profile.avatar_url}
                 alt="Profile"
+                width={96}
+                height={96}
                 className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-xl"
               />
             ) : (

@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, useInView } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { ArrowLeft, Database, Filter as FilterIcon, Globe } from 'lucide-react';
+import { ArrowLeft, Filter as FilterIcon, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { FilterInterface } from './FilterInterface';
+import { FilterInterface } from './filters/FilterInterface';
 import { RawPagesTable } from './RawPagesTable';
+import { RawPage } from './filters/types';
 import Link from 'next/link';
 
 interface AnimationContainerProps {
@@ -58,17 +59,14 @@ interface CrawlSession {
 
 export function CrawlSessionDetailsShell({ sessionId }: CrawlSessionDetailsShellProps) {
   const [session, setSession] = useState<CrawlSession | null>(null);
-  const [rawPages, setRawPages] = useState([]);
-  const [filteredPages, setFilteredPages] = useState([]);
+  const [rawPages, setRawPages] = useState<RawPage[]>([]);
+  const [filteredPages, setFilteredPages] = useState<RawPage[]>([]);
+  const [, setExcludedPages] = useState<string[]>([]);
+  const [highlightedPageIds, setHighlightedPageIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchSessionDetails();
-    fetchRawPages();
-  }, [sessionId]);
-
-  const fetchSessionDetails = async () => {
+  const fetchSessionDetails = useCallback(async () => {
     try {
       const response = await fetch(`/api/admin/crawl-sessions/${sessionId}`);
       if (!response.ok) {
@@ -80,9 +78,9 @@ export function CrawlSessionDetailsShell({ sessionId }: CrawlSessionDetailsShell
       console.error('Error fetching session details:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch session');
     }
-  };
+  }, [sessionId]);
 
-  const fetchRawPages = async () => {
+  const fetchRawPages = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/admin/crawl-sessions/${sessionId}/raw-pages`);
@@ -98,36 +96,30 @@ export function CrawlSessionDetailsShell({ sessionId }: CrawlSessionDetailsShell
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionId]);
 
-  const handleFiltersChange = (filters: any) => {
-    // Apply filters to raw pages
-    let filtered = rawPages.filter(page => {
-      // Status code filtering
-      if (filters.statusCodes.length > 0 && !filters.statusCodes.includes('all')) {
-        if (filters.statusCodes.includes('200') && page.status_code !== 200) return false;
-        if (filters.statusCodes.includes('2xx') && (page.status_code < 200 || page.status_code >= 300)) return false;
-        if (filters.statusCodes.includes('3xx') && (page.status_code < 300 || page.status_code >= 400)) return false;
-        if (filters.statusCodes.includes('4xx') && (page.status_code < 400 || page.status_code >= 500)) return false;
-      }
+  useEffect(() => {
+    fetchSessionDetails();
+    fetchRawPages();
+  }, [fetchSessionDetails, fetchRawPages]);
 
-      // URL filtering
-      if (filters.urlIncludes && !page.url.includes(filters.urlIncludes)) return false;
-      if (filters.urlExcludes && page.url.includes(filters.urlExcludes)) return false;
+  const handleExclusionChange = (excludedPages: RawPage[]) => {
+    const excludedPageIds = excludedPages.map(page => page.id);
+    setExcludedPages(excludedPageIds);
 
-      // Meta description filtering
-      if (filters.hasMetaDescription === 'yes' && !page.meta_description) return false;
-      if (filters.hasMetaDescription === 'no' && page.meta_description) return false;
-
-      // Title tag filtering
-      if (filters.hasTitleTag === 'yes' && !page.title) return false;
-      if (filters.hasTitleTag === 'no' && page.title) return false;
-
-      return true;
-    });
-
+    // Update filtered pages to exclude the selected pages
+    const filtered = rawPages.filter(page => !excludedPageIds.includes(page.id));
     setFilteredPages(filtered);
   };
+
+  const handleHighlightChange = useCallback((pageIds: string[]) => {
+    setHighlightedPageIds(pageIds);
+  }, []);
+
+  const handlePagesUpdate = useCallback((updatedPages: RawPage[]) => {
+    setRawPages(updatedPages);
+    setFilteredPages(updatedPages);
+  }, []);
 
   const getClientDisplayName = () => {
     if (!session) return 'Loading...';
@@ -198,21 +190,23 @@ export function CrawlSessionDetailsShell({ sessionId }: CrawlSessionDetailsShell
       </AnimationContainer>
 
       {/* Filter Interface */}
-      <AnimationContainer delay={0.1}>
+      <div>
         <FilterInterface
-          onFiltersChange={handleFiltersChange}
-          filteredCount={filteredPages.length}
+          onExclusionChange={handleExclusionChange}
+          onHighlightChange={handleHighlightChange}
           totalCount={rawPages.length}
+          pages={rawPages}
         />
-      </AnimationContainer>
+      </div>
 
       {/* Raw Pages Table */}
       <AnimationContainer delay={0.2}>
         <RawPagesTable
           pages={filteredPages}
-          onPagesUpdate={setRawPages}
+          onPagesUpdate={handlePagesUpdate}
           selectedCrawlSession={sessionId}
           loading={loading}
+          highlightedPageIds={highlightedPageIds}
         />
       </AnimationContainer>
     </div>

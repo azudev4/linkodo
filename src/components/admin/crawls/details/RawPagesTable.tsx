@@ -1,23 +1,16 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { RawPage } from './filters/types';
 import {
   Check,
   X,
   ExternalLink,
-  Eye,
-  EyeOff,
   ChevronLeft,
   ChevronRight,
   MoreHorizontal,
-  Download,
-  User,
-  Calendar,
-  Link,
   FileText,
-  Hash,
   CheckCircle,
   XCircle,
   AlertCircle,
@@ -34,36 +27,16 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-// Mock data structure based on the raw_pages table
-interface RawPage {
-  id: string;
-  url: string;
-  title: string | null;
-  meta_description: string | null;
-  status_code: number | null;
-  crawled_at: string | null;
-  session_id: string;
-  client_name: string | null;
-  content_hash: string | null;
-  link_hash: string | null;
-  h1_tags: any | null;
-  links: any | null;
-  robots_content: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-  // Added for filtering
-  excluded: boolean;
-  filtered_reason?: string;
-}
 
 interface RawPagesTableProps {
   pages: RawPage[];
   onPagesUpdate: (pages: RawPage[]) => void;
   selectedCrawlSession?: string;
   loading?: boolean;
+  highlightedPageIds?: string[];
 }
 
-export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, loading = false }: RawPagesTableProps) {
+export function RawPagesTable({ pages, onPagesUpdate, loading = false, highlightedPageIds = [] }: RawPagesTableProps) {
   const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<'all' | 'included' | 'excluded'>('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -89,21 +62,26 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, load
 
     // Sort pages
     filtered.sort((a, b) => {
-      let aValue: any = a[sortBy];
-      let bValue: any = b[sortBy];
+      const aValue = a[sortBy];
+      const bValue = b[sortBy];
 
-      if (sortBy === 'crawled_at' || sortBy === 'created_at') {
-        aValue = new Date(aValue || 0).getTime();
-        bValue = new Date(bValue || 0).getTime();
-      } else if (typeof aValue === 'string') {
-        aValue = aValue?.toLowerCase() || '';
-        bValue = bValue?.toLowerCase() || '';
+      if (sortBy === 'crawled_at') {
+        const aTime = new Date(aValue || 0).getTime();
+        const bTime = new Date(bValue || 0).getTime();
+        return sortDirection === 'asc' ? aTime - bTime : bTime - aTime;
+      } else if (sortBy === 'status_code') {
+        const aCode = (aValue as number) || 0;
+        const bCode = (bValue as number) || 0;
+        return sortDirection === 'asc' ? aCode - bCode : bCode - aCode;
+      } else {
+        // String comparison for url, title
+        const aStr = String(aValue || '').toLowerCase();
+        const bStr = String(bValue || '').toLowerCase();
+        if (sortDirection === 'asc') {
+          return aStr.localeCompare(bStr);
+        }
+        return bStr.localeCompare(aStr);
       }
-
-      if (sortDirection === 'asc') {
-        return aValue > bValue ? 1 : -1;
-      }
-      return aValue < bValue ? 1 : -1;
     });
 
     return filtered;
@@ -136,23 +114,24 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, load
     setSelectedPages(new Set());
   };
 
-  const bulkInclude = () => {
-    const updatedPages = pages.map(page =>
-      selectedPages.has(page.id) ? { ...page, excluded: false } : page
-    );
-    onPagesUpdate(updatedPages);
-    clearSelection();
-  };
+  // Bulk operations (currently unused but kept for future functionality)
+  // const bulkInclude = () => {
+  //   const updatedPages = pages.map(page =>
+  //     selectedPages.has(page.id) ? { ...page, excluded: false } : page
+  //   );
+  //   onPagesUpdate(updatedPages);
+  //   clearSelection();
+  // };
 
-  const bulkExclude = (reason?: string) => {
-    const updatedPages = pages.map(page =>
-      selectedPages.has(page.id)
-        ? { ...page, excluded: true, filtered_reason: reason || 'Manual exclusion' }
-        : page
-    );
-    onPagesUpdate(updatedPages);
-    clearSelection();
-  };
+  // const bulkExclude = (reason?: string) => {
+  //   const updatedPages = pages.map(page =>
+  //     selectedPages.has(page.id)
+  //       ? { ...page, excluded: true, filtered_reason: reason || 'Manual exclusion' }
+  //       : page
+  //   );
+  //   onPagesUpdate(updatedPages);
+  //   clearSelection();
+  // };
 
   const togglePageInclusion = (pageId: string) => {
     const updatedPages = pages.map(page =>
@@ -172,7 +151,7 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, load
     }
   };
 
-  const formatDate = (dateString: string | null) => {
+  const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
@@ -182,7 +161,7 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, load
     });
   };
 
-  const getStatusColor = (statusCode: number | null) => {
+  const getStatusColor = (statusCode: number | null | undefined) => {
     if (!statusCode) return 'text-gray-400';
     if (statusCode >= 200 && statusCode < 300) return 'text-green-600';
     if (statusCode >= 300 && statusCode < 400) return 'text-yellow-600';
@@ -190,7 +169,7 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, load
     return 'text-gray-600';
   };
 
-  const getStatusIcon = (statusCode: number | null) => {
+  const getStatusIcon = (statusCode: number | null | undefined) => {
     if (!statusCode) return <AlertCircle className="w-4 h-4" />;
     if (statusCode >= 200 && statusCode < 300) return <CheckCircle className="w-4 h-4" />;
     if (statusCode >= 400) return <XCircle className="w-4 h-4" />;
@@ -439,6 +418,9 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, load
                   Meta Description
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Content Length
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
                 <th
@@ -453,12 +435,32 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, load
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {paginatedPages.map((page) => (
+              {loading ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center justify-center space-y-3">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                      <p className="text-gray-500">Loading pages...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginatedPages.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center justify-center space-y-3">
+                      <FileText className="w-12 h-12 text-gray-400" />
+                      <p className="text-gray-500">No pages found</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                paginatedPages.map((page) => (
                 <tr
                   key={page.id}
                   className={cn(
                     "hover:bg-gray-50 transition-colors",
-                    page.excluded && "opacity-50 bg-gray-25"
+                    page.excluded && "opacity-50 bg-gray-25",
+                    highlightedPageIds.includes(page.id) && "ring-2 ring-red-300 bg-red-50 border-red-200"
                   )}
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -468,6 +470,7 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, load
                       onChange={() => togglePageSelection(page.id)}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
+                
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className={cn("flex items-center text-sm font-medium", getStatusColor(page.status_code))}>
@@ -497,6 +500,11 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, load
                   <td className="px-6 py-4">
                     <div className="text-sm text-gray-600 truncate max-w-xs" title={page.meta_description || ''}>
                       {page.meta_description || <span className="text-gray-400 italic">No description</span>}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-600">
+                      {page.content?.length ? `${page.content.length.toLocaleString()} chars` : <span className="text-gray-400 italic">No content</span>}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -604,7 +612,7 @@ export function RawPagesTable({ pages, onPagesUpdate, selectedCrawlSession, load
                     </div>
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>

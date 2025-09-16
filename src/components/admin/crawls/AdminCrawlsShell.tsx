@@ -37,9 +37,10 @@ const AnimationContainer = ({ children, className, delay = 0.1 }: AnimationConta
 
 
 export function AdminCrawlsShell() {
+  // Session selection callback - navigation is handled by ClientSessionsList component
   const handleSessionSelect = (sessionId: string) => {
-    // Navigation will be handled by the ClientSessionsList component
-    // using Next.js router to navigate to /admin/crawls/[id]
+    // This could be used for analytics, logging, or other side effects
+    console.log('Session selected:', sessionId);
   };
 
   return (

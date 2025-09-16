@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -72,9 +73,11 @@ export function ProfileAvatar({
         )}
       >
         {avatar_url ? (
-          <img
+          <Image
             src={avatar_url}
             alt={full_name || 'Profile'}
+            width={size === 'sm' ? 28 : size === 'md' ? 32 : 36}
+            height={size === 'sm' ? 28 : size === 'md' ? 32 : 36}
             className="w-full h-full object-cover"
           />
         ) : (

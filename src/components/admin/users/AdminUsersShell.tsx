@@ -3,8 +3,6 @@
 import React from 'react';
 import { motion, useInView } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { Users, UserPlus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { AdminUsersTable } from './AdminUsersTable';
 
 interface AnimationContainerProps {

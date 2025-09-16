@@ -11,7 +11,7 @@ interface RouteContext {
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
     // Validate admin access
-    const validation = await validateAdminAccess(request);
+    const validation = await validateAdminAccess();
     if (!validation.success) {
       return NextResponse.json(
         { error: validation.error },
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 export async function PUT(request: NextRequest, { params }: RouteContext) {
   try {
     // Validate admin access
-    const validation = await validateAdminAccess(request);
+    const validation = await validateAdminAccess();
     if (!validation.success) {
       return NextResponse.json(
         { error: validation.error },
@@ -65,7 +65,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
     // Validate allowed fields
     const allowedFields = ['full_name', 'company_name', 'role', 'email'];
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(updates)) {
       if (allowedFields.includes(key)) {
@@ -109,7 +109,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     // If email was updated, also update in auth
     if (updateData.email) {
       const { error: authError } = await supabase.auth.admin.updateUserById(id, {
-        email: updateData.email
+        email: updateData.email as string
       });
 
       if (authError) {
@@ -144,7 +144,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 export async function DELETE(request: NextRequest, { params }: RouteContext) {
   try {
     // Validate admin access
-    const validation = await validateAdminAccess(request);
+    const validation = await validateAdminAccess();
     if (!validation.success) {
       return NextResponse.json(
         { error: validation.error },
