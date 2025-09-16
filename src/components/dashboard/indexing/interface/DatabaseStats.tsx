@@ -60,7 +60,7 @@ export function DatabaseStats({ stats, onRefresh, isLoading = false }: DatabaseS
         </Button>
       </CardHeader>
       
-      <CardContent className="min-h-[280px]">
+      <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {stats && !isLoading ? (
             <>
@@ -93,7 +93,7 @@ export function DatabaseStats({ stats, onRefresh, isLoading = false }: DatabaseS
         </div>
 
         {/* Enhanced Embedding Progress Bar */}
-        <div className="h-[120px] flex items-stretch">
+        <div className="flex items-stretch">
           {stats && !isLoading ? (
             stats.totalPages > 0 && (
               <motion.div

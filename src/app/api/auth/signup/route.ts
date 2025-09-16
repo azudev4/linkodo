@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, fullName } = await request.json()
+    const { email, password, fullName, companyName } = await request.json()
     
     if (!email || !password) {
       return NextResponse.json(
@@ -21,7 +21,8 @@ export async function POST(request: NextRequest) {
       password,
       options: {
         data: {
-          full_name: fullName
+          full_name: fullName,
+          company_name: companyName
         },
         emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/auth/confirm`
       }

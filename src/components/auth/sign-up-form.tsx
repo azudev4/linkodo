@@ -17,6 +17,7 @@ import { useState } from 'react'
 
 export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutRef<'div'>) {
   const [fullName, setFullName] = useState('')
+  const [companyName, setCompanyName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [repeatPassword, setRepeatPassword] = useState('')
@@ -46,7 +47,8 @@ export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutR
         body: JSON.stringify({
           email,
           password,
-          fullName
+          fullName,
+          companyName
         })
       })
 
@@ -86,6 +88,17 @@ export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutR
                   required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="companyName">Company Name</Label>
+                <Input
+                  id="companyName"
+                  type="text"
+                  placeholder="Acme Corp"
+                  required
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
                 />
               </div>
               <div className="grid gap-2">

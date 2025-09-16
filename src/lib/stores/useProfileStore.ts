@@ -6,7 +6,7 @@ export interface UserProfile {
   email: string;
   full_name: string | null;
   avatar_url: string | null;
-  role: 'default' | 'early_access' | 'admin';
+  role: 'user' | 'early_access' | 'admin';
   created_at: string;
   updated_at: string;
 }
@@ -24,7 +24,7 @@ export interface ProfileState extends ErrorState {
   reset: () => void;
   
   // Getters
-  hasRole: (role: 'default' | 'early_access' | 'admin') => boolean;
+  hasRole: (role: 'user' | 'early_access' | 'admin') => boolean;
   hasAccess: (requiredRoles: string[]) => boolean;
   isStale: () => boolean;
 }
@@ -109,7 +109,7 @@ export const useProfileStore = createPersistedStore<ProfileState>(
     },
     
     // PUBLIC: Check if user has specific role
-    hasRole: (role: 'default' | 'early_access' | 'admin') => {
+    hasRole: (role: 'user' | 'early_access' | 'admin') => {
       const state = get();
       if (state.isStale()) {
         state._fetchProfile();
